@@ -1,4 +1,5 @@
 env_eva
 __pycache__
 build
+db
 *.egg-info
