@@ -1,0 +1,10 @@
+[build-system]
+requires = ["setuptools>=61.0", "pyzmq"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dptmodule"
+description = "Base module for all DPT modules"
+requires-python = ">=3.10"
+dependencies = ["setuptools>=61.0", "pyzmq"]
+dynamic = ["version"]

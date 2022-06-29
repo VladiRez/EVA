@@ -1,3 +1,4 @@
 evasdk
 pyzmq
 pymongo
+-e ./DPT/Control/dpt_module

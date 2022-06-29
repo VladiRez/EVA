@@ -1,7 +1,7 @@
 # Author: Robert Knobloch robert.knobloch@stud.tu-darmstadt.de   
 
 """
-Base module for all FUNCTIONALITY modules. The main purpose is thereby establishing
+Base module for all DPT modules. The main purpose is thereby establishing
 the ZeroMQ communication, receiving, creating and sending the messages.
 """
 
@@ -11,8 +11,8 @@ import logging
 import json
 from pathlib import Path
 
-class module():
-    """Base module for all FUNCTIONALITY modules.
+class DptModule():
+    """Base module for all DPT modules.
     """
 
     def __init__(self, module_name):
@@ -50,7 +50,7 @@ class module():
         self.socket.send_multipart([bytes(address, encoding="ascii"), b'', msg_bytes])
         self.sysout('send message', f"to {address}: {msg_bytes}")
     
-    def receive(self, timeout=None, raw_bytes=False) -> set(str, object|bytes):
+    def receive(self, timeout=None, raw_bytes=False) -> set[str, object|bytes]:
         """
         Poll for messages.
         
