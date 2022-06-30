@@ -61,7 +61,7 @@ class DptModule():
         
         Returns:
         --------
-        full_message:  (sender, message_bytes)
+        full_message:  (sender, message)
         """
  
         event = self.socket.poll(timeout=timeout)

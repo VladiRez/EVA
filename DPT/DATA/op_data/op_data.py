@@ -8,7 +8,9 @@ PyMongo docs: https://pymongo.readthedocs.io/en/stable/
 from pymongo import MongoClient
 from pprint import pprint
 
-class OpData:
+from dpt_module import DptModule
+
+class OpData(DptModule):
     """
     Class for interfacing with the Operational Data Storage
     """
@@ -16,7 +18,20 @@ class OpData:
         self.client = MongoClient()
         self.db = self.client["dpt_op_data"]
 
-    def add_waypoint(self, key, ):
+        super().__init__()
+
+    def listen(self):
+        """
+        Receivable messages:
+        from EvaInterface:
+            ("New WP", waypoint : set[float * 6])
+        """
+        (sender, msg) = self.receive()
+
+        if msg[0] == "New WP":
+            pass
+
+
 
 
 

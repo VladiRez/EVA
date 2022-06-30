@@ -30,9 +30,10 @@ class EvaInterface(DptModule):
         Listen to EVA waypoint button press, send waypoint to self.set_waypoint method.
         """
         with self.eva.websocket() as ws:
-            ws.register("backdriving", self.set_waypoint)
+            ws.register("backdriving", self.new_waypoint)
 
-    def set_waypoint(self, waypoint):
+    def new_waypoint(self, waypoint):
+        self.transmit("op_data", ("New WP", waypoint))
         pass
 
     def goto_zero(self):
@@ -42,3 +43,4 @@ class EvaInterface(DptModule):
 
 if __name__ == "__main__":
     eva = EvaInterface()
+    eva.goto_zero()
