@@ -50,18 +50,22 @@ class DptModule():
         self.socket.send_multipart([bytes(address, encoding="ascii"), b'', msg_bytes])
         self.sysout('send message', f"to {address}: {msg_bytes}")
     
-    def receive(self, timeout=None, raw_bytes=False) -> set[str, object|bytes]:
+    def receive(self, timeout=None, raw_bytes=False) -> tuple[str, object|bytes]:
         """
         Poll for messages.
         
         Parameters:
         -----------
-        timeout . . . . . . Time to wait for message. ¨None¨ means wait forever.
+        timeout . . . . . . Time to wait for message in ms. ¨None¨ means wait forever.
         raw_bytes . . . . . True if received message is not to be decoded.        
         
         Returns:
         --------
         full_message:  (sender, message)
+
+        Raises:
+        -------
+        ReceiveTimeoutException: If no message could be received in the given time
         """
  
         event = self.socket.poll(timeout=timeout)
@@ -83,12 +87,7 @@ class DptModule():
             self.sysout("timeout", 
                         'No response within the timeout-time of: '+str(timeout)+' milliseconds')
 
-            CORE = json.dumps({'response':'response-timeout in: '+self.name,
-                                'request': 'request-timeout in: '+self.name,
-                                'json_data': {'response': "response-timeout"}})
-            CORE_bytes = CORE.encode('ascii')
-
-            return ["---TIMEOUT---", CORE_bytes]
+            raise ReceiveTimeoutException()
 
     def sysout(self, action, meta="UnspecifiedMeta") -> None:
         """Meta is limited to 200 chars at the moment
@@ -104,3 +103,8 @@ class DptModule():
     def destroy(self) -> None:
         self.socket.close()
         self.context.destroy()
+
+class ReceiveTimeoutException(Exception):
+    def __init__(self,*args,**kwargs):
+        Exception.__init__(self,*args,**kwargs)
+

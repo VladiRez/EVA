@@ -9,7 +9,8 @@ import logging
 import json
 from os import path, pardir
 
-class broker():
+
+class Broker():
     """Run mediate() in infinite loop to use the broker.
     Broker runs on ip: tcp://127.0.0.1:5554.
     """

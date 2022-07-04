@@ -18,19 +18,44 @@ class OpData(DptModule):
         self.client = MongoClient()
         self.db = self.client["dpt_op_data"]
 
-        super().__init__()
+        super().__init__("op_data")
 
     def listen(self):
         """
         Receivable messages:
         from EvaInterface:
-            ("New WP", waypoint : set[float * 6])
+            ("New WP", waypoint : tuple[float * 6])
+            ("Get WP", waypoint_id : int)
+
+        :raises
+        NonexistentWaypointException: If no Waypoint with given ID could be found ("Get ID")
         """
-        (sender, msg) = self.receive()
 
-        if msg[0] == "New WP":
-            pass
+        while True:
 
+            col_waypoints = self.db["waypoints"]
+            (sender, msg) = self.receive()
+
+            if msg[0] == "New WP":
+                post = {"wp_id": 3,
+                        "coordinates": msg[1]}
+                wp_id = col_waypoints.insert_one(post).inserted_id
+                print(f"\n New WP with ID {wp_id}")
+
+            elif msg[0] == "Get WP":
+                wp_id = msg[1]
+                if not isinstance(wp_id, int):
+                    raise ValueError
+                wp_doc = col_waypoints.find_one({"wp_id": wp_id})
+                if wp_doc is None:
+                    raise NonexistentWaypointException
+                wp = wp_doc["coordinates"]
+                self.transmit(sender, (wp_id, wp))
+
+
+class NonexistentWaypointException(Exception):
+    def __init__(self,*args,**kwargs):
+        Exception.__init__(self,*args,**kwargs)
 
 
 
