@@ -4,3 +4,4 @@ __pycache__
 build
 db
 *.egg-info
+db.sqlite3

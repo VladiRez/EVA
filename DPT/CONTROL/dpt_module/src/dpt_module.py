@@ -9,7 +9,7 @@ import sys
 import zmq
 import logging
 import json
-from pathlib import Path
+from enum import IntEnum
 
 class DptModule():
     """Base module for all DPT modules.
@@ -104,7 +104,13 @@ class DptModule():
         self.socket.close()
         self.context.destroy()
 
+
 class ReceiveTimeoutException(Exception):
     def __init__(self,*args,**kwargs):
         Exception.__init__(self,*args,**kwargs)
 
+
+class Requests(IntEnum):
+    NEW_WP = 0
+    GET_WP = 1
+    GET_ALL_WP_IDS = 2

@@ -8,7 +8,7 @@ PyMongo docs: https://pymongo.readthedocs.io/en/stable/
 from pymongo import MongoClient
 from pprint import pprint
 
-from dpt_module import DptModule
+from dpt_module import DptModule, Requests
 
 class OpData(DptModule):
     """
@@ -36,13 +36,13 @@ class OpData(DptModule):
             col_waypoints = self.db["waypoints"]
             (sender, msg) = self.receive()
 
-            if msg[0] == "New WP":
+            if msg[0] == Requests.NEW_WP:
                 post = {"wp_id": 3,
                         "coordinates": msg[1]}
                 wp_id = col_waypoints.insert_one(post).inserted_id
                 print(f"\n New WP with ID {wp_id}")
 
-            elif msg[0] == "Get WP":
+            elif msg[0] == Requests.GET_WP:
                 wp_id = msg[1]
                 if not isinstance(wp_id, int):
                     raise ValueError
@@ -51,6 +51,13 @@ class OpData(DptModule):
                     raise NonexistentWaypointException
                 wp = wp_doc["coordinates"]
                 self.transmit(sender, (wp_id, wp))
+
+            elif msg[0] == Requests.GET_ALL_WP_IDS:
+
+                wp_all_ids_cursor = col_waypoints.find({}, {"wp_id": True})
+                wp_all_ids = [wp["wp_id"] for wp in wp_all_ids_cursor]
+                print(wp_all_ids)
+                self.transmit(sender, wp_all_ids)
 
 
 class NonexistentWaypointException(Exception):

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Saved Waypoints</title>
+  </head>
+  <body>
+    <p>Saved waypoints: </p>
+    <ul>
+        {% for id in wp_ids %}
+            <li>{{ id }}</li>
+        {% endfor %}
+    </ul>
+  </body>
+</html>
