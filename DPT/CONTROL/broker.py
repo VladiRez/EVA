@@ -6,8 +6,6 @@ The main function of the broker is to forward incoming messages to the proper re
 import sys
 import zmq
 import logging
-import json
-from os import path, pardir
 
 
 class Broker():
@@ -40,7 +38,7 @@ class Broker():
             self.sysout('route message', aas_module="Broker", 
                         meta = f"From {sender_str} to {address_str}: {msg}")
             
-            self.socket.send_multipart([address, sender, b'', msg])
+            self.socket.send_multipart([address, sender, b'', msg], flags=zmq.DONTWAIT)
 
     def sysout(self, action, aas_module="UnspecifiedModule", meta="UnspecifiedMeta"):
         """ Meta is limited to 150 characters.
@@ -50,10 +48,10 @@ class Broker():
         info_out = f"""\n<> CONTROL [{str(aas_module)}] #{str(action)} 
                        -> { meta[0:150]+'...' if (len(meta) > 150) else meta}"""
          
-        sys.stdout.write(info_out)
+        #sys.stdout.write(info_out)
         logging.info(info_out)
             
-        sys.stdout.flush()
+        #sys.stdout.flush()
     
     def destroy(self):
         self.sysout('Control closed')

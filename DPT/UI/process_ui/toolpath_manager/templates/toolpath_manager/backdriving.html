@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/html">
+  <head>
+    <meta charset="utf-8">
+    <title>Saved Waypoints</title>
+  </head>
+  <body>
+    {% if errors %}
+      {% for error in errors %}
+        <li>ERROR --- {{ error }} </li>
+      {% endfor %}
+      <form action="{% url 'index' %}" method="GET">
+        {% csrf_token %}
+        <button type="submit">
+          Click here to go back.
+        </button>
+      </form>
+    {% else %}
+      <p> Backdriving... </p>
+      <form action="{% url 'index' %}" method="GET">
+        {% csrf_token %}
+        <button type="submit">
+          Exit Backdriving mode
+        </button>
+      </form>
+    {% endif %}
+
+  </body>
+</html>

@@ -1,15 +1,34 @@
 <!DOCTYPE html>
-<html>
+<html xmlns="http://www.w3.org/1999/html">
   <head>
     <meta charset="utf-8">
     <title>Saved Waypoints</title>
   </head>
   <body>
-    <p>Saved waypoints: </p>
-    <ul>
-        {% for id in wp_ids %}
-            <li>{{ id }}</li>
+    {% if errors %}
+        {% for error in errors %}
+            <li>ERROR --- {{ error }} </li>
         {% endfor %}
-    </ul>
+    {% else %}
+        <h1> DPT Eva Main Interface</h1>
+        <p>Saved waypoints: </p>
+        <ul>
+            {% for id in wp_ids %}
+                <li><a href="{% url 'waypoint_detail' id %}">{{ id }}</a></li>
+            {% endfor %}
+        </ul>
+        <form action="{% url 'backdriving' %}" method="get">
+            {% csrf_token %}
+            <button type="submit">
+                Backdriving mode
+            </button>
+        </form>
+        <form action="{% url 'create_toolpath' %}" method="get">
+            {% csrf_token %}
+            <button type="submit">
+                Toolpath Editor
+            </button>
+        </form>
+    {% endif %}
   </body>
 </html>
