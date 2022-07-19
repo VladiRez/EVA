@@ -11,10 +11,17 @@
         {% endfor %}
     {% else %}
         <h1> DPT Eva Main Interface</h1>
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
         <p>Saved waypoints: </p>
         <ul>
-            {% for id in wp_ids %}
-                <li><a href="{% url 'waypoint_detail' id %}">{{ id }}</a></li>
+            {% for wp in wps %}
+                <li><a href="{% url 'waypoint_detail' wp.0 %}">{{ wp.0 }}: {{ wp.1 }} </a></li>
             {% endfor %}
         </ul>
         <form action="{% url 'backdriving' %}" method="get">

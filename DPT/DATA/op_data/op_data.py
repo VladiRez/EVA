@@ -6,7 +6,8 @@ PyMongo docs: https://pymongo.readthedocs.io/en/stable/
 """
 
 from pymongo import MongoClient
-from pprint import pprint
+from bson.objectid import ObjectId
+import time
 
 
 from dpt_module import DptModule, Requests, Responses
@@ -36,24 +37,36 @@ class OpData(DptModule):
                 break
 
             if msg[0] == Requests.NEW_WP:
-                post = {"wp_id": 3,
-                        "coordinates": msg[1]}
-                wp_id = col_waypoints.insert_one(post).inserted_id
+                post = {"coordinates": msg[1],
+                        "wp_name": "New WP",
+                        "creation_time": time.time()}
+                hash_id = col_waypoints.insert_one(post).inserted_id
 
             elif msg[0] == Requests.GET_WP:
-                wp_id = msg[1]
-                if not isinstance(wp_id, int):
-                    raise ValueError
-                wp_doc = col_waypoints.find_one({"wp_id": wp_id})
+                hash_id = ObjectId(msg[1])
+                wp_doc = col_waypoints.find_one(hash_id)
                 if wp_doc is None:
-                    self.transmit(sender, (wp_id, Responses.NONEXISTENT_WAYPOINT))
-                wp = wp_doc["coordinates"]
-                self.transmit(sender, (wp_id, wp))
+                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_WAYPOINT))
+
+                wp_coor = wp_doc["coordinates"]
+                wp_name = wp_doc["wp_name"]
+                wp_time = wp_doc["creation_time"]
+                self.transmit(sender, (str(hash_id), wp_name, wp_coor, wp_time))
 
             elif msg[0] == Requests.GET_ALL_WP_IDS:
-                wp_all_ids_cursor = col_waypoints.find({}, {"wp_id": True})
-                wp_all_ids = [wp["wp_id"] for wp in wp_all_ids_cursor]
-                self.transmit(sender, wp_all_ids)
+                all_wps_cursor = col_waypoints.find({})
+                wp_all_ids = [str(wp["_id"]) for wp in all_wps_cursor]
+                all_wps_cursor = col_waypoints.find({})
+                wp_all_names = [wp["wp_name"] for wp in all_wps_cursor]
+                self.transmit(sender, (wp_all_ids, wp_all_names))
+
+            elif msg[0] == Requests.DEL_WP:
+                hash_id = ObjectId(msg[1])
+                result = col_waypoints.delete_one({"_id": hash_id})
+                if result.acknowledged and result.deleted_count == 1:
+                    self.transmit(sender, Requests.DEL_WP)
+                else:
+                    self.transmit(sender, Responses.NONEXISTENT_WAYPOINT)
 
 
 

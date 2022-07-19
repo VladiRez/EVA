@@ -53,14 +53,15 @@ class DptModule():
                                    flags=zmq.DONTWAIT)
         self.sysout('send message', f"to {address}: {msg_bytes}")
     
-    def receive(self, from_sender: str = None, timeout=None, raw_bytes=False) \
-            -> tuple[str, object | bytes]:
+    def receive(self, from_sender: str = None, expected_msg: tuple[object] = None,
+                timeout=None, raw_bytes=False) -> tuple[str, object | bytes]:
         """
         Poll for messages.
         
         Parameters:
         -----------
         from_sender . . . . Only accept messages from this sender
+        expected_msg  . . . Only accept messages with this content
         timeout . . . . . . Time to wait for message in ms. ¨None¨ means wait forever.
         raw_bytes . . . . . True if received message is not to be decoded.        
         
@@ -99,13 +100,24 @@ class DptModule():
                 if from_sender is not None and sender != from_sender:
                     continue
 
+                # If the message should not be unpacked
                 if raw_bytes:
                     self.sysout("Received message", f"From {sender}: {msg_bytes}")
+
+                    # Continue if message is not the one expected
+                    if expected_msg is not None and msg_bytes not in expected_msg:
+                        continue
+
                     return (sender, msg_bytes)
 
                 msg_json = msg_bytes.decode('ascii')
                 self.sysout("Received message", f"From {sender}: {msg_json}")
                 msg_pyobj = json.loads(msg_json)
+
+                # Continue if message is not one of the expected ones
+                if expected_msg is not None and msg_pyobj not in expected_msg:
+                    continue
+
                 return (sender, msg_pyobj)
 
             else:
@@ -127,6 +139,10 @@ class DptModule():
                 self.socket.recv_multipart(zmq.DONTWAIT)
         except zmq.error.Again:
             return
+
+    def shutdown(self) -> None:
+        self.socket.close()
+        self.context.term()
 
     def sysout(self, action, meta="UnspecifiedMeta") -> None:
         """

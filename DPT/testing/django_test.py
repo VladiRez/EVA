@@ -7,11 +7,12 @@ from DPT.INTERFACE.eva import EvaInterface
 from DPT.CONTROL.broker import Broker
 
 
-from multiprocessing import Process
+from multiprocessing import Process, Event
 
-def Eva():
-    eva = EvaInterface()
-    eva.listen()
+
+def Eva(stop: Event):
+    with EvaInterface() as eva:
+        stop.wait()
 
 def Data():
     data = OpData()
@@ -22,13 +23,19 @@ def DPTBroker():
     broker.mediate()
 
 if __name__ == "__main__":
-    p_eva = Process(target=Eva)
+    stop_eva = Event()
+
+    p_eva = Process(target=Eva, args=(stop_eva,))
     p_data = Process(target=Data)
     p_broker = Process(target=DPTBroker)
 
     p_broker.start()
     p_data.start()
     p_eva.start()
+
+    time.sleep(3)
+    input("Press Enter to stop")
+    stop_eva.set()
 
     p_eva.join()
     p_data.terminate()

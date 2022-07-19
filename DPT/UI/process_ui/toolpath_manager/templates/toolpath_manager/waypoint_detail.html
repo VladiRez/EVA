@@ -5,21 +5,36 @@
     <title>Saved Waypoints</title>
   </head>
   <body>
-    <h1> Waypoint details for waypoint: {{ wp_id }} </h1>
+    <h1> Waypoint details for waypoint: </h1>
+    <h2> {{ name }} </h2>
+    <h3> {{ hash_id }} </h3>
+
     {% if errors %}
       {% for error in errors %}
         <li>ERROR --- {{ error }} </li>
       {% endfor %}
-    {% else %}
-      <p> Joint Angles: {{ joint_angles }} <p>
-    {% endif %}
 
-    <form action="{% url 'index' %}" method="POST">
-      {% csrf_token %}
-      <button type="submit">
-        Delete Waypoint.
-      </button>
-    </form>
+    {% else %}
+
+      <p> Joint Angles: {{ joint_angles }} <p>
+      <p> Creation Time: {{ timestr }} </p>
+
+      {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <form action="{% url 'waypoint_delete' hash_id %}" method="POST">
+          {% csrf_token %}
+          <button type="submit">
+            Delete Waypoint.
+          </button>
+        </form>
+      {% endif %}
+
+    {% endif %}
 
     <form action="{% url 'index' %}" method="GET">
       {% csrf_token %}
