@@ -12,6 +12,7 @@ from multiprocessing import Process, Event
 
 def Eva(stop: Event):
     with EvaInterface() as eva:
+        eva.listen()
         stop.wait()
 
 def Data():

@@ -33,13 +33,8 @@ class EvaInterface(DptModule):
         self.eva = Eva(host, token)
         self.abort = Event()
 
-        self.lock = Lock()
         self.backdriving_abort = Event()
-        self.backdriving_success = Event()
-        self.backdriving_thread = None
-
-        self.listening_thread = Thread(target=self.listen)
-        self.listening_thread.start()
+        self.listening_thread = Thread(target=self.listen_stop_backdriving)
 
     # Define methods for usage of EvaInterface object with a context manager ("with" statement)
     def __enter__(self):
@@ -51,12 +46,72 @@ class EvaInterface(DptModule):
     def shutdown(self):
         self.abort.set()
         super().shutdown()
-        if self.backdriving_thread is not None:
-            if self.backdriving_thread.is_alive():
-                self.backdriving_abort.set()
-                self.backdriving_thread.join()
         if self.listening_thread.is_alive():
             self.listening_thread.join()
+
+    def listen(self) -> None:
+        """
+        Loop for listening to incoming requests.
+        Expects a tuple with the first entry being the request type.
+        """
+
+        while not self.abort.is_set():
+            try:
+                (sender, msg) = self.receive()
+
+            # Abort when module is being terminated
+            except zmq.ContextTerminated:
+                break
+            except zmq.error.ZMQError as e:
+                if e.errno == zmq.Event.CLOSED.value:
+                    break
+                else:
+                    raise e
+
+            if msg[0] == Requests.SHUTDOWN:
+                self.shutdown()
+                break
+
+            elif msg[0] == Requests.BACKDRIVING_MODE:
+                self.backdriving_mode(sender)
+
+
+            elif msg[0] == Requests.STOP_BACKDRIVING:
+                self.backdriving_abort.set()
+                self.backdriving_thread.join()
+                self.transmit(sender, Requests.STOP_BACKDRIVING)
+
+    def backdriving_mode(self, sender: str) -> None:
+        """
+        Listen to EVA waypoint button press, send waypoint to self.set_waypoint method.
+        """
+        # Clear the backdriving events
+        self.backdriving_abort.clear()
+
+        # Thread to listen to the stop command
+        self.listening_thread = Thread(target=self.listen_stop_backdriving)
+        self.listening_thread.start()
+
+        success = False
+        with self.eva.lock() as eva, self.eva.websocket() as ws:
+
+            # Execute method new_waypoint and pass the waypoint when the waypoint button is pressed
+            # (see eva websocket docs)
+            ws.register("backdriving", self.new_waypoint)
+
+            # Uncomment to monitor robot state
+            # ws.register("state_change", self.print_state)
+
+            # Context to change the lock renew period
+            with EvaWithLocker(eva, fallback_renew_period=2):
+                success = True
+                self.transmit(sender, Requests.BACKDRIVING_MODE)
+                self.backdriving_abort.wait()
+                self.transmit(sender, Requests.STOP_BACKDRIVING)
+                self.listening_thread.join()
+
+        if not success:
+            self.transmit(sender, Responses.LOCK_FAILED)
 
     def new_waypoint(self, waypoint: dict[str, object]):
         self.transmit("op_data", (Requests.NEW_WP, waypoint["waypoint"]))
@@ -108,10 +163,9 @@ class EvaInterface(DptModule):
     # Threaded methods, these have to be thread-safe
     ###############################################################################################
 
-    def listen(self) -> None:
+    def listen_stop_backdriving(self):
         """
-        Loop for listening to incoming requests.
-        Expects a tuple with the first entry being the request type.
+        Loop for listening to incoming requests to stop backdriving.
         """
 
         while not self.abort.is_set():
@@ -127,52 +181,17 @@ class EvaInterface(DptModule):
                 else:
                     raise e
 
-            if msg[0] == Requests.SHUTDOWN:
+            if msg == Requests.SHUTDOWN:
                 self.shutdown()
                 break
 
-            elif msg[0] == Requests.BACKDRIVING_MODE:
-                # Clear the backdriving events
-                self.backdriving_abort.clear()
-                self.backdriving_success.clear()
-
-                # Check if there is already a running thread
-                if self.backdriving_thread is not None:
-                    if self.backdriving_thread.is_alive():
-                        self.transmit(sender, Responses.LOCK_FAILED)
-                        continue
-
-                self.backdriving_thread = Thread(target=self.backdriving_mode)
-                self.backdriving_thread.start()
-
-                success = self.backdriving_success.wait(8)
-                if success:
-                    self.transmit(sender, Requests.BACKDRIVING_MODE)
-                else:
-                    self.transmit(sender, Responses.LOCK_FAILED)
-
-            elif msg[0] == Requests.STOP_BACKDRIVING:
+            elif msg == Requests.STOP_BACKDRIVING:
                 self.backdriving_abort.set()
-                self.backdriving_thread.join()
-                self.transmit(sender, Requests.STOP_BACKDRIVING)
+                break
 
-    def backdriving_mode(self) -> None:
-        """
-        Listen to EVA waypoint button press, send waypoint to self.set_waypoint method.
-        """
 
-        with self.eva.lock() as eva, self.eva.websocket() as ws:
-
-            # Execute method new_waypoint and pass the waypoint when the waypoint button is pressed
-            # (see eva websocket docs)
-            ws.register("backdriving", self.new_waypoint)
-
-            # Uncomment to monitor robot state
-            # ws.register("state_change", self.print_state)
-
-            with EvaWithLocker(eva, fallback_renew_period=2):
-                self.backdriving_success.set()
-                self.backdriving_abort.wait()
+    # STATIC METHODS
+    ###############################################################################################
 
     @staticmethod
     def print_state(msg):

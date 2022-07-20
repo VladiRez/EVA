@@ -27,8 +27,7 @@ def index(request, reset=False):
         errors.append("Timeout: No response from Database")
 
     if reset:
-        print("Test")
-        ui_module.transmit("eva_interface", (Requests.STOP_BACKDRIVING,))
+        ui_module.transmit("eva_interface", Requests.STOP_BACKDRIVING)
 
         try:
             (sender, conf) = ui_module.receive(from_sender="eva_interface",
@@ -60,7 +59,7 @@ def backdriving(request):
         errors.append("Timeout: No Response from EVA_INTERFACE")
 
     # What if an unexpected response is received
-    if confirmation != Requests.BACKDRIVING_MODE:
+    if confirmation is not None and confirmation != Requests.BACKDRIVING_MODE:
         if confirmation == Responses.LOCK_FAILED:
             errors.append("Eva Lock failed. See if EVA is connected and no other lock exists.")
         else:
