@@ -176,6 +176,7 @@ class Requests(IntEnum):
     GET_WP = 1
     GET_ALL_WP_IDS = 2
     DEL_WP = 3
+    CHANGE_WP_NAME = 4
 
     # Eva Requests
     BACKDRIVING_MODE = 10
@@ -183,11 +184,14 @@ class Requests(IntEnum):
 
 
 class Responses(IntEnum):
+    # General Responses
+    UNEXPECTED_FAILURE = -1
+
     # Database Responses
-    NONEXISTENT_WAYPOINT = -1
+    NONEXISTENT_WAYPOINT = -2
 
     # Eva Responses
-    LOCK_FAILED = -2
+    LOCK_FAILED = -3
 
 
 

@@ -25,12 +25,16 @@
             <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
           {% endfor %}
         </ul>
-      {% else %}
-        <form action="{% url 'waypoint_delete' hash_id %}" method="POST">
+      {% endif %}
+      {% if not deleted %}
+        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
           {% csrf_token %}
-          <button type="submit">
-            Delete Waypoint.
-          </button>
+          <input type="submit" name="delete" value="Delete Waypoint"/>
+        </form>
+        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
+          {% csrf_token %}
+          {{ name_form }}
+          <input type="submit" name="change_name" value="Change Waypoint Name"/>
         </form>
       {% endif %}
 

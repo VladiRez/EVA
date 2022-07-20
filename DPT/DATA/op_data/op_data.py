@@ -66,8 +66,16 @@ class OpData(DptModule):
                 if result.acknowledged and result.deleted_count == 1:
                     self.transmit(sender, Requests.DEL_WP)
                 else:
-                    self.transmit(sender, Responses.NONEXISTENT_WAYPOINT)
+                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
 
+            elif msg[0] == Requests.CHANGE_WP_NAME:
+                hash_id = ObjectId(msg[1])
+                new_value = {"$set": {"wp_name": msg[2]}}
+                result = col_waypoints.update_one({"_id": hash_id}, new_value)
+                if result.acknowledged and result.modified_count == 1:
+                    self.transmit(sender, Requests.CHANGE_WP_NAME)
+                else:
+                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
 
 
 

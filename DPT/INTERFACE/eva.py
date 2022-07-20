@@ -8,6 +8,7 @@ author: robert.knobloch@stud.tu-darmstadt.de
 """
 import zmq
 from evasdk import Eva
+from evasdk.eva_locker import EvaWithLocker
 import logging
 import signal
 from threading import Thread, Lock, Event
@@ -160,11 +161,27 @@ class EvaInterface(DptModule):
         Listen to EVA waypoint button press, send waypoint to self.set_waypoint method.
         """
 
-        with self.eva.lock(), self.eva.websocket() as ws:
+        with self.eva.lock() as eva, self.eva.websocket() as ws:
+
+            # Execute method new_waypoint and pass the waypoint when the waypoint button is pressed
+            # (see eva websocket docs)
             ws.register("backdriving", self.new_waypoint)
-            self.backdriving_success.set()
-            self.backdriving_abort.wait()
 
+            # Uncomment to monitor robot state
+            # ws.register("state_change", self.print_state)
 
+            with EvaWithLocker(eva, fallback_renew_period=2):
+                self.backdriving_success.set()
+                self.backdriving_abort.wait()
+
+    @staticmethod
+    def print_state(msg):
+        # Several state changes should be ignored because they happen so often and
+        # clutter the logs
+        if "servos.telemetry.position" not in msg["changes"] \
+                and "global.inputs" not in msg["changes"] \
+                and "servos.telemetry.temperature" not in msg["changes"]:
+
+            print(msg)
 
 
