@@ -22,6 +22,8 @@ class OpData(DptModule):
 
         super().__init__("op_data")
 
+        self.listen()
+
     def listen(self) -> None:
         """
         Loop for listening to incoming requests.

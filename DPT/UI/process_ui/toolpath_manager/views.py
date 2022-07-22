@@ -109,7 +109,7 @@ def waypoint_detail(request, hash_id, delete=False):
         errors.append("Timeout: No Response from Database")
 
 
-    # DELETE WAYPOINT
+    # PROCESS POSTS
     ##############################################################################################
 
     if request.method == "POST":
@@ -151,7 +151,23 @@ def waypoint_detail(request, hash_id, delete=False):
                 except ReceiveTimeoutException:
                     errors.append("Timeout: No Response from Database")
 
+        elif "goto" in request.POST:
+            if joint_angles is not None:
+                ui_module.transmit("eva_interface", (Requests.GOTO_WP, joint_angles))
+                try:
+                    (sender, msg) = ui_module.receive(from_sender="eva_interface",
+                                      expected_msg=(Requests.GOTO_WP, Responses.LOCK_FAILED),
+                                      timeout=10000)
 
+                    if msg == Requests.GOTO_WP:
+                        messages.info(request, "Successfully moved to waypoint.")
+                    else:
+                        errors.append("Error: Could not get EVA Lock")
+
+                except ReceiveTimeoutException:
+                    errors.append("Timeout: No Response from Eva_Interface")
+            else:
+                errors.append("Error getting joint angles.")
 
 
     # CONTEXT AND RETURN
@@ -169,7 +185,7 @@ def waypoint_detail(request, hash_id, delete=False):
         timestr = None
 
     context = {"deleted": deleted, "hash_id": hash_id, "name": name, "joint_angles": joint_angles,
-               "timestr": timestr, "name_form": name_form}
+               "timestr": timestr, "name_form": name_form, "errors": errors}
 
     return render(request, "toolpath_manager/waypoint_detail.html", context)
 

@@ -12,12 +12,10 @@ from multiprocessing import Process, Event
 
 def Eva(stop: Event):
     with EvaInterface() as eva:
-        eva.listen()
         stop.wait()
 
 def Data():
     data = OpData()
-    data.listen()
 
 def DPTBroker():
     broker = Broker()

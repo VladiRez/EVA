@@ -6,6 +6,7 @@ https://eva-python-sdk.readthedocs.io/en/docs-development/
 
 author: robert.knobloch@stud.tu-darmstadt.de
 """
+import requests.exceptions
 import zmq
 from evasdk import Eva
 from evasdk.eva_locker import EvaWithLocker
@@ -35,6 +36,8 @@ class EvaInterface(DptModule):
 
         self.backdriving_abort = Event()
         self.listening_thread = Thread(target=self.listen_stop_backdriving)
+
+        self.listen()
 
     # Define methods for usage of EvaInterface object with a context manager ("with" statement)
     def __enter__(self):
@@ -75,15 +78,41 @@ class EvaInterface(DptModule):
             elif msg[0] == Requests.BACKDRIVING_MODE:
                 self.backdriving_mode(sender)
 
-
             elif msg[0] == Requests.STOP_BACKDRIVING:
                 self.backdriving_abort.set()
                 self.backdriving_thread.join()
                 self.transmit(sender, Requests.STOP_BACKDRIVING)
 
+            elif msg[0] == Requests.GOTO_WP:
+                joint_angles = msg[1]
+                lock_success = self.goto_wp(joint_angles)
+                if lock_success:
+                    self.transmit(sender, Requests.GOTO_WP)
+                else:
+                    self.transmit(sender, Responses.LOCK_FAILED)
+
+            else:
+                self.transmit(sender, Responses.UNKNOWN_COMMAND)
+
+    def goto_wp(self, joint_angles: list[float]) -> bool:
+        """
+
+        :param joint_angles: list of six floats representing the joint angles
+        :return: True if lock was successful
+        """
+
+        lock_success = False
+        with self.eva.lock():
+            lock_success = True
+            self.eva.control_go_to(joints=joint_angles)
+
+        return lock_success
+
     def backdriving_mode(self, sender: str) -> None:
         """
         Listen to EVA waypoint button press, send waypoint to self.set_waypoint method.
+
+        :param sender: the string of the address to return a response to.
         """
         # Clear the backdriving events
         self.backdriving_abort.clear()

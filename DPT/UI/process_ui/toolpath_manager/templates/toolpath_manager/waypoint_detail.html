@@ -18,6 +18,7 @@
 
       <p> Joint Angles: {{ joint_angles }} <p>
       <p> Creation Time: {{ timestr }} </p>
+      <br>
 
       {% if messages %}
         <ul class="messages">
@@ -27,15 +28,23 @@
         </ul>
       {% endif %}
       {% if not deleted %}
-        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
-          {% csrf_token %}
-          <input type="submit" name="delete" value="Delete Waypoint"/>
-        </form>
+
         <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
           {% csrf_token %}
           {{ name_form }}
           <input type="submit" name="change_name" value="Change Waypoint Name"/>
         </form>
+        <br>
+        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
+          {% csrf_token %}
+          <input type="submit" name="goto", value="Go To Waypoint">
+        </form>
+        <br>
+        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
+          {% csrf_token %}
+          <input type="submit" name="delete" value="Delete Waypoint"/>
+        </form>
+        <br>
       {% endif %}
 
     {% endif %}

@@ -181,17 +181,19 @@ class Requests(IntEnum):
     # Eva Requests
     BACKDRIVING_MODE = 10
     STOP_BACKDRIVING = 11
+    GOTO_WP = 12
 
 
 class Responses(IntEnum):
     # General Responses
     UNEXPECTED_FAILURE = -1
+    UNKNOWN_COMMAND = -2
 
     # Database Responses
-    NONEXISTENT_WAYPOINT = -2
+    NONEXISTENT_WAYPOINT = -10
 
     # Eva Responses
-    LOCK_FAILED = -3
+    LOCK_FAILED = -20
 
 
 
