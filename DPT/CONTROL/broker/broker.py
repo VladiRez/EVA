@@ -56,3 +56,7 @@ class Broker():
     def destroy(self):
         self.sysout('Control closed')
         self.context.destroy()
+
+if __name__ == "__main__":
+    b = Broker()
+    b.mediate()

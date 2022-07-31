@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  broker:
+    image: 192.168.56.104:5000/broker
+    networks: 
+      - dpt
+    deploy:
+      mode: replicated
+      replicas: 2
+  
+  op-data-db:
+    image: mongo
+    networks:
+      - dpt
+    deploy:
+      mode: replicated
+      replicas: 1
+  
+  op-data-interface:
+    image: 192.168.56.104:5000/op_data
+    networks:
+      - dpt
+    deploy:
+      mode: replicated
+      replicas: 2
+
+networks:
+  dpt:

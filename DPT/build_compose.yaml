@@ -1,0 +1,13 @@
+services:
+  broker:
+    build:
+      context: ./CONTROL/broker
+    image: 192.168.56.104:5000/broker
+  base_module:
+    build:
+      context: ./CONTROL/base_module
+    image: 192.168.56.104:5000/base_module
+  op_data:
+    build:
+      context: ./DATA/op_data
+    image: 192.168.56.104:5000/op_data

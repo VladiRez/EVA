@@ -80,5 +80,7 @@ class OpData(DptModule):
                     self.transmit(sender, Responses.UNEXPECTED_FAILURE)
 
 
-
+if __name__ == "__main__":
+    opd = OpData()
+    opd.listen()
 
