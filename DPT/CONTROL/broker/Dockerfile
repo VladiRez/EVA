@@ -1,5 +1,5 @@
 FROM python:alpine
 WORKDIR /app
-COPY broker.py broker.py
 RUN ["pip", "install", "pyzmq"]
+COPY broker.py broker.py
 CMD ["python", "broker.py"]

@@ -4,24 +4,27 @@ The main function of the broker is to forward incoming messages to the proper re
 """
 
 import sys
-import zmq
 import logging
+import os
 
+import zmq
 
 class Broker():
     """Run mediate() in infinite loop to use the broker.
     Broker runs on ip: tcp://127.0.0.1:5554.
     """
-    
+
     def __init__(self):
         logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
+
+        port = os.environ["BROKER_PORT"]
 
         # Start ZeroMQ connection 
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.ROUTER)
-        self.socket.bind("tcp://127.0.0.1:5554")
+        self.socket.bind(f"tcp://*:{port}")
         
-        self.sysout("started", "BROKER", f"Running on socket {str(self.socket)}")
+        self.sysout("started", "BROKER", f"Running on port: {port}")
 
     def mediate(self):
         """Receive and forward incoming messages.
