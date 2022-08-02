@@ -5,6 +5,8 @@ services:
     image: 192.168.56.104:5000/broker
     networks: 
       - dpt
+    environment:
+      - BROKER_PORT=5554
     deploy:
       mode: replicated
       replicas: 2
@@ -21,9 +23,48 @@ services:
     image: 192.168.56.104:5000/op_data
     networks:
       - dpt
+    environment:
+      - BROKER_PORT=5554
+      - BROKER_NAME=DPT_broker
     deploy:
       mode: replicated
       replicas: 2
 
+  process-ui:
+    image: 192.168.56.104:5000/process_ui
+    networks:
+      - dpt
+      - webserver
+    environment:
+      - BROKER_PORT=5554
+      - BROKER_NAME=DPT_broker
+      - WEBSERVER_IP=192.168.56.0/24
+    deploy:
+      mode: replicated
+      replicas: 2
+  
+  ui-webserver:
+    image: 192.168.56.104:5000/nginx_ui
+    networks:
+      - webserver
+    ports:
+      - "80:80"
+    environment:
+      - BROKER_PORT=5554
+      - BROKER_NAME=DPT_broker
+    deploy:
+      mode: replicated
+      replicas: 2
+
+  test-environment:
+    image: ubuntu
+    networks:
+      - dpt
+    tty: true
+    deploy:
+      mode: replicated
+      replicas: 1
+
 networks:
   dpt:
+  webserver:

@@ -11,3 +11,22 @@ services:
     build:
       context: ./DATA/op_data
     image: 192.168.56.104:5000/op_data
+    depends_on:
+      - base_module
+  eva_interface:
+    build:
+      context: ./INTERFACE/eva
+    image: 192.168.56.104:5000/eva_interface
+    depends_on:
+      - base_module
+  process_ui:
+    build:
+      context: ./UI/django_app
+    image: 192.168.56.104:5000/process_ui
+    depends_on:
+      - base_module
+  nginx_ui:
+    build:
+      context: ./UI/nginx_conf
+    image: 192.168.56.104:5000/nginx_ui
+    

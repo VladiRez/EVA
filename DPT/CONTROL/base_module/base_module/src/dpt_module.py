@@ -10,6 +10,7 @@ import zmq
 import logging
 import json
 import time
+import os
 from enum import IntEnum
 
 class DptModule():
@@ -22,14 +23,17 @@ class DptModule():
         
         logging.basicConfig(format='%(asctime)s %(message)s',
                             level=logging.DEBUG)
-       
+
+        broker_port = os.environ["BROKER_PORT"]
+        broker_name = os.environ["BROKER_NAME"]
+
         # ZeroMQ Setup        
         self.context = zmq.Context()
         self.name = module_name
         self.socket = self.context.socket(zmq.DEALER)
         self.socket.setsockopt_string(zmq.IDENTITY, self.name)
         self.socket.setsockopt(zmq.LINGER, 0)
-        self.socket.connect(f"tcp://127.0.0.1:5554")
+        self.socket.connect(f"tcp://{broker_name}:{broker_port}")
         self.sysout("started", f"Running on socket {str(self.socket)}")
 
     def transmit(self, address: str, message: object) -> None:

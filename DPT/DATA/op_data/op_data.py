@@ -8,6 +8,7 @@ PyMongo docs: https://pymongo.readthedocs.io/en/stable/
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 import time
+import logging
 
 
 from dpt_module import DptModule, Requests, Responses
@@ -16,8 +17,11 @@ class OpData(DptModule):
     """
     Class for interfacing with the Operational Data Storage
     """
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
     def __init__(self):
-        self.client = MongoClient()
+        self.client = MongoClient("DPT_op-data-db")
         self.db = self.client["dpt_op_data"]
 
         super().__init__("op_data")
