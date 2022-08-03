@@ -9,6 +9,7 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 import time
 import logging
+import os
 
 
 from dpt_module import DptModule, Requests, Responses
@@ -21,7 +22,9 @@ class OpData(DptModule):
     logger.setLevel(logging.DEBUG)
 
     def __init__(self):
-        self.client = MongoClient("DPT_op-data-db")
+        db_address = os.environ["DB_ADDRESS"]
+
+        self.client = MongoClient(db_address)
         self.db = self.client["dpt_op_data"]
 
         super().__init__("op_data")

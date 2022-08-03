@@ -4,11 +4,14 @@ from django.contrib import messages
 from django import forms
 
 import time
+import os
 
 from dpt_module import DptModule, Requests, Responses, ReceiveTimeoutException
 
 ui_module = DptModule("ui")
 
+OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
+EVA_INTERFACE_ADDR = os.environ["EVA_INTERFACE_ADDR"]
 
 def index(request, reset=False):
     """
@@ -16,12 +19,12 @@ def index(request, reset=False):
     """
 
     ui_module.flush_queue()
-    ui_module.transmit("op_data", (Requests.GET_ALL_WP_IDS,))
+    ui_module.transmit(OP_DATA_ADDR, (Requests.GET_ALL_WP_IDS,))
     errors = []
     wp_tuple = None
 
     try:
-        (sender, (ids, names)) = ui_module.receive(from_sender="op_data", timeout=100)
+        (sender, (ids, names)) = ui_module.receive(timeout=100)
         wp_tuple = zip(ids, names)
     except ReceiveTimeoutException:
         errors.append("Timeout: No response from Database")
@@ -30,8 +33,8 @@ def index(request, reset=False):
         ui_module.transmit("eva_interface", Requests.STOP_BACKDRIVING)
 
         try:
-            (sender, conf) = ui_module.receive(from_sender="eva_interface",
-                                 expected_msg=(Requests.STOP_BACKDRIVING,), timeout=10000)
+            (sender, conf) = ui_module.receive(expected_msg=(Requests.STOP_BACKDRIVING,), 
+                                               timeout=10000)
             if conf == Requests.STOP_BACKDRIVING:
                 messages.info(request, "Successfully unlocked EVA.")
         except ReceiveTimeoutException:
@@ -49,11 +52,11 @@ def backdriving(request):
     """
 
     ui_module.flush_queue()
-    ui_module.transmit("eva_interface", (Requests.BACKDRIVING_MODE,))
+    ui_module.transmit(EVA_INTERFACE_ADDR, (Requests.BACKDRIVING_MODE,))
     errors = []
     confirmation = None
     try:
-        (sender, confirmation) = ui_module.receive(from_sender="eva_interface", timeout=10000)
+        (sender, confirmation) = ui_module.receive(timeout=10000)
 
     except ReceiveTimeoutException:
         errors.append("Timeout: No Response from EVA_INTERFACE")
@@ -80,7 +83,7 @@ def waypoint_detail(request, hash_id, delete=False):
     ##############################################################################################
 
     ui_module.flush_queue()
-    ui_module.transmit("op_data", (Requests.GET_WP, hash_id))
+    ui_module.transmit(OP_DATA_ADDR, (Requests.GET_WP, hash_id))
     errors = []
     joint_angles = None
     name = None
@@ -93,7 +96,7 @@ def waypoint_detail(request, hash_id, delete=False):
     ###############################################################################################
 
     try:
-        (sender, msg) = ui_module.receive(from_sender="op_data", timeout=100)
+        (sender, msg) = ui_module.receive(timeout=100)
 
         if msg[1] == Responses.NONEXISTENT_WAYPOINT:
             ret_hash_id = msg[0]
@@ -115,8 +118,8 @@ def waypoint_detail(request, hash_id, delete=False):
     if request.method == "POST":
         if "delete" in request.POST:
             try:
-                ui_module.transmit("op_data", (Requests.DEL_WP, hash_id))
-                (sender, msg) = ui_module.receive(from_sender="op_data",
+                ui_module.transmit(OP_DATA_ADDR, (Requests.DEL_WP, hash_id))
+                (sender, msg) = ui_module.receive(
                         expected_msg=(Requests.DEL_WP, Responses.NONEXISTENT_WAYPOINT), timeout=100)
 
                 if msg == Requests.DEL_WP:
@@ -136,10 +139,9 @@ def waypoint_detail(request, hash_id, delete=False):
             else:
                 new_name = name_form.cleaned_data["new_name"]
                 name = new_name
-                ui_module.transmit("op_data", (Requests.CHANGE_WP_NAME, hash_id, new_name))
+                ui_module.transmit(OP_DATA_ADDR, (Requests.CHANGE_WP_NAME, hash_id, new_name))
                 try:
-                    (sender, msg) = ui_module.receive(from_sender="op_data",
-                                                      expected_msg=(Requests.CHANGE_WP_NAME,),
+                    (sender, msg) = ui_module.receive(expected_msg=(Requests.CHANGE_WP_NAME,),
                                                       timeout=100)
 
                     if msg == Responses.UNEXPECTED_FAILURE:
@@ -153,9 +155,9 @@ def waypoint_detail(request, hash_id, delete=False):
 
         elif "goto" in request.POST:
             if joint_angles is not None:
-                ui_module.transmit("eva_interface", (Requests.GOTO_WP, joint_angles))
+                ui_module.transmit(EVA_INTERFACE_ADDR, (Requests.GOTO_WP, joint_angles))
                 try:
-                    (sender, msg) = ui_module.receive(from_sender="eva_interface",
+                    (sender, msg) = ui_module.receive(
                                       expected_msg=(Requests.GOTO_WP, Responses.LOCK_FAILED),
                                       timeout=10000)
 

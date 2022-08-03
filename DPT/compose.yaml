@@ -26,6 +26,9 @@ services:
     environment:
       - BROKER_PORT=5554
       - BROKER_NAME=DPT_broker
+      - EVA_INTERFACE_ADDR=DPT_eva-interface
+      - OP_DATA_ADDR=DPT_op-data-interface
+      - DB_ADDRESS=DPT_op-data-db
     deploy:
       mode: replicated
       replicas: 2
@@ -39,6 +42,8 @@ services:
       - BROKER_PORT=5554
       - BROKER_NAME=DPT_broker
       - WEBSERVER_IP=192.168.56.0/24
+      - EVA_INTERFACE_ADDR=DPT_eva-interface
+      - OP_DATA_ADDR=DPT_op-data-interface
     deploy:
       mode: replicated
       replicas: 2
@@ -55,6 +60,17 @@ services:
     deploy:
       mode: replicated
       replicas: 2
+
+  eva-interface:
+    image: 192.168.56.104:5000/eva_interface
+    networks:
+      - dpt
+    environment:
+      BROKER_PORT: 5554
+      BROKER_NAME: DPT_broker
+    deploy:
+      mode: replicated
+      replicas: 1
 
   test-environment:
     image: ubuntu

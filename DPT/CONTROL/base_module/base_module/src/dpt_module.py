@@ -24,17 +24,17 @@ class DptModule():
         logging.basicConfig(format='%(asctime)s %(message)s',
                             level=logging.DEBUG)
 
-        broker_port = os.environ["BROKER_PORT"]
-        broker_name = os.environ["BROKER_NAME"]
+        self.connect_port = os.environ["BROKER_PORT"]
 
         # ZeroMQ Setup        
         self.context = zmq.Context()
         self.name = module_name
-        self.socket = self.context.socket(zmq.DEALER)
-        self.socket.setsockopt_string(zmq.IDENTITY, self.name)
-        self.socket.setsockopt(zmq.LINGER, 0)
-        self.socket.connect(f"tcp://{broker_name}:{broker_port}")
-        self.sysout("started", f"Running on socket {str(self.socket)}")
+        self.socket_out = self.context.socket(zmq.DEALER)
+        self.socket_out.setsockopt(zmq.LINGER, 0)
+        self.socket_in = self.context.socket(zmq.ROUTER)
+        self.socket_in.setsockopt(zmq.LINGER, 0)
+        self.socket_in.bind(f"tcp://*:{self.connect_port}")
+        self.sysout("started", f"Running on socket {str(self.socket_out)}")
 
     def transmit(self, address: str, message: object) -> None:
         """
@@ -53,7 +53,8 @@ class DptModule():
             msg_json = json.dumps(message)
             msg_bytes = msg_json.encode('ascii')
 
-        self.socket.send_multipart([bytes(address, encoding="ascii"), b'', msg_bytes],
+        self.socket_out.connect(f"tcp://{address}:{self.connect_port}")
+        self.socket_out.send_multipart([b'', msg_bytes],
                                    flags=zmq.DONTWAIT)
         self.sysout('send message', f"to {address}: {msg_bytes}")
     
@@ -90,14 +91,14 @@ class DptModule():
             if timeout is not None:
                 # If from_sender is set: Decrease timeout by time passed since method start
                 timeout = timeout - delta_t
-            event = self.socket.poll(timeout=timeout)
+            event = self.socket_in.poll(timeout=timeout)
 
             # Updating the passed time
             t1 = time.perf_counter()
             delta_t = t1 - t0
 
             if event == zmq.POLLIN:
-                (sender_bytes, _, msg_bytes) = self.socket.recv_multipart()
+                (sender_bytes, _, msg_bytes) = self.socket_in.recv_multipart()
                 sender = str(sender_bytes, encoding='ascii')
 
                 # Only regard messages from desired sender
@@ -140,7 +141,7 @@ class DptModule():
         """
         try:
             for i in range(1000):
-                self.socket.recv_multipart(zmq.DONTWAIT)
+                self.socket_in.recv_multipart(zmq.DONTWAIT)
         except zmq.error.Again:
             return
 
