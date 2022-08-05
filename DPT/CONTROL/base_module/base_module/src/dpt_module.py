@@ -6,143 +6,126 @@ the ZeroMQ communication, receiving, creating and sending the messages.
 """
 
 import sys
-import zmq
+import zmq.asyncio
 import logging
 import json
 import time
 import os
+import asyncio
 from enum import IntEnum
 
 class DptModule():
     """Base module for all DPT modules.
     """
 
-    def __init__(self, module_name):
+    def __init__(self):
         """Definition of the parameter of a module derived from this class.
         """        
         
         logging.basicConfig(format='%(asctime)s %(message)s',
                             level=logging.DEBUG)
 
-        self.connect_port = os.environ["BROKER_PORT"]
+        self.zmq_port = os.environ["ZMQ_PORT"]
 
         # ZeroMQ Setup        
-        self.context = zmq.Context()
-        self.name = module_name
-        self.socket_out = self.context.socket(zmq.DEALER)
-        self.socket_out.setsockopt(zmq.LINGER, 0)
-        self.socket_in = self.context.socket(zmq.ROUTER)
-        self.socket_in.setsockopt(zmq.LINGER, 0)
-        self.socket_in.bind(f"tcp://*:{self.connect_port}")
-        self.sysout("started", f"Running on socket {str(self.socket_out)}")
+        self.context = zmq.asyncio.Context()
+        self.server_socket = self.context.socket(zmq.ROUTER)
+        self.server_socket.bind(f"tcp://*:{self.zmq_port}")
+        self.client_sockets = {}
 
-    def transmit(self, address: str, message: object) -> None:
+        self.server_msg_queue = asyncio.Queue()
+
+        self.sysout("started", f"Started Service")
+        self.sysout("started", f"Running server_socket on {str(self.server_socket.underlying)}")
+
+    async def register_connection(self, address: str) -> bool:
+        new_socket = self.context.socket(zmq.DEALER)
+        new_socket.connect(f"tcp://{address}:{self.zmq_port}")
+        new_socket.send(b"confirm_connection")
+
+        event = await new_socket.poll(timeout=100)
+        if event != zmq.POLLIN:
+            return False
+        if await new_socket.recv() != b"connection_confirmed":
+            return False
+
+        self.sysout("Outgoing connection established", f"To {address}")
+        self.client_sockets[address] = new_socket                
+        return True
+
+
+    async def client_transmit(self, address: str, message: object) -> None:
         """
         Transmit message to module using the broker.
-        Sends messages as json, except if message is a bytes object.
+        Sends messages as json.
         
         Parameters:
         -----------
         address . . . . . . Name of the module to receive the message.
         message . . . . . . Any object to be sent
         """
-        
-        if isinstance(message, bytes):
-            msg_bytes = message
-        else: 
-            msg_json = json.dumps(message)
-            msg_bytes = msg_json.encode('ascii')
 
-        self.socket_out.connect(f"tcp://{address}:{self.connect_port}")
-        self.socket_out.send_multipart([b'', msg_bytes],
-                                   flags=zmq.DONTWAIT)
+        msg_json = json.dumps(message)
+        msg_bytes = msg_json.encode('ascii')
+
+        try:
+            client_socket = self.client_sockets[address]
+        except KeyError:
+            raise BaseModuleException("Module with that address not registered.")
+
+        
+        await client_socket.send(msg_bytes, flags=zmq.DONTWAIT)
         self.sysout('send message', f"to {address}: {msg_bytes}")
-    
-    def receive(self, from_sender: str = None, expected_msg: tuple[object] = None,
-                timeout=None, raw_bytes=False) -> tuple[str, object | bytes]:
-        """
-        Poll for messages.
-        
-        Parameters:
-        -----------
-        from_sender . . . . Only accept messages from this sender
-        expected_msg  . . . Only accept messages with this content
-        timeout . . . . . . Time to wait for message in ms. ¨None¨ means wait forever.
-        raw_bytes . . . . . True if received message is not to be decoded.        
-        
-        Returns:
-        --------
-        full_message:  (sender, message)
 
-        Raises:
-        -------
-        ReceiveTimeoutException: If no message could be received in the given time
-        """
 
-        t0 = time.perf_counter()
-        # The time since the start of the method
-        # This is being used to determined if timeout is reached in case that messages came in
-        # but not from the desired sender.
-        delta_t = 0
+    async def server_transmit(self, address: bytes, message: object) -> None:
+        msg_json = json.dumps(message)
+        msg_bytes = msg_json.encode('ascii')
+        await self.server_socket.send_multipart([address, msg_bytes])
 
-        # If from_sender is set: Loop until message arrives from correct sender or timeout
-        # is reached
+
+    async def client_receive(self, address: str, timeout=None) -> object:
+        try:
+            client_socket = self.client_sockets[address]
+        except KeyError:
+            raise BaseModuleException("Module with that address not registered.")
+
+        event = await client_socket.poll(timeout=timeout)
+        if event != zmq.POLLIN:
+            raise BaseModuleException(
+                f"Timeout while receiving message on client socket (to f{address}).")
+
+        msg_bytes = await client_socket.recv()
+        msg_json = msg_bytes.decode('ascii')
+        self.sysout("Received message", f"From {address}: {msg_json}")
+        msg_pyobj = json.loads(msg_json)  
+        return msg_pyobj
+
+
+    async def monitor_server_socket(self) -> None:
         while True:
-            if timeout is not None:
-                # If from_sender is set: Decrease timeout by time passed since method start
-                timeout = timeout - delta_t
-            event = self.socket_in.poll(timeout=timeout)
+            (sender, msg_bytes) = await self.server_socket.recv_multipart()
 
-            # Updating the passed time
-            t1 = time.perf_counter()
-            delta_t = t1 - t0
+            if msg_bytes == b"confirm_connection":
+                await self.server_socket.send_multipart([sender, b"connection_confirmed"])
+                self.sysout("Incoming connection established", f"From {sender}")
+                continue
 
-            if event == zmq.POLLIN:
-                (sender_bytes, _, msg_bytes) = self.socket_in.recv_multipart()
-                sender = str(sender_bytes, encoding='ascii')
+            msg_json = msg_bytes.decode('ascii')
+            self.sysout("Received message", f"From {sender}: {msg_json}")
+            msg_pyobj = json.loads(msg_json)   
 
-                # Only regard messages from desired sender
-                if from_sender is not None and sender != from_sender:
-                    continue
+            await self.server_msg_queue.put((sender, msg_pyobj))
 
-                # If the message should not be unpacked
-                if raw_bytes:
-                    self.sysout("Received message", f"From {sender}: {msg_bytes}")
 
-                    # Continue if message is not the one expected
-                    if expected_msg is not None and msg_bytes not in expected_msg:
-                        continue
-
-                    return (sender, msg_bytes)
-
-                msg_json = msg_bytes.decode('ascii')
-                self.sysout("Received message", f"From {sender}: {msg_json}")
-                msg_pyobj = json.loads(msg_json)
-
-                # Continue if message is not one of the expected ones
-                if expected_msg is not None and msg_pyobj not in expected_msg:
-                    continue
-
-                return (sender, msg_pyobj)
-
-            else:
-                # If there is no response within the timeout-time
-                self.sysout("timeout",
-                            'No response within the timeout-time of: '+str(timeout)+' milliseconds')
-
-                raise ReceiveTimeoutException()
-
-        # Raise Timeout if no message from desired sender was received in time
-        raise ReceiveTimeoutException()
-
-    def flush_queue(self) -> None:
+    async def flush_queue(self) -> None:
         """
         Method to clear the modules message queue as to avoid reading dead messages.
         """
         try:
-            for i in range(1000):
-                self.socket_in.recv_multipart(zmq.DONTWAIT)
-        except zmq.error.Again:
+            for _ in self.server_msg_queue.qsize():
+                self.server_msg_queue.get_nowait()
+        except asyncio.QueueEmpty:
             return
 
     def shutdown(self) -> None:
@@ -157,7 +140,7 @@ class DptModule():
         """
         meta = str(meta)
         
-        info_out = f"""\n<> FUNCTIONALITY [{str(self.name)}] #{str(action)} 
+        info_out = f"""\n<> FUNCTIONALITY #{str(action)} 
                        -> { meta[0:150]+'...' if len(meta) > 150 else meta}"""
                        
         #sys.stdout.write(info_out)
@@ -208,7 +191,7 @@ EXCEPTIONS
 """
 
 
-class ReceiveTimeoutException(Exception):
+class BaseModuleException(Exception):
     def __init__(self,*args,**kwargs):
         Exception.__init__(self,*args,**kwargs)
 

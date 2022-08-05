@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  base_module:
+    build:
+      context: /home/bob/EVA/DPT/CONTROL/base_module
+    image: base_module
+  dealer:
+    build:
+      context: ./comm1
+    networks:
+      - comm
+  router:
+    build:
+      context: ./comm2
+    networks:
+      - comm
+
+networks:
+  comm:

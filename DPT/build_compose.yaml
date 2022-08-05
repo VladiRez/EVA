@@ -29,4 +29,7 @@ services:
     build:
       context: ./UI/nginx_conf
     image: 192.168.56.104:5000/nginx_ui
-    
+  dockertest:
+    build:
+      context: ./testing/dockertest
+    image: 192.168.56.104:5000/dockertest
