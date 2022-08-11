@@ -33,6 +33,7 @@ class OpData(DptModule):
         while True:
 
             col_waypoints = self.db["waypoints"]
+            toolpaths = self.db["toolpaths"]
             (sender, msg) = self.receive()
 
             if msg[0] == Requests.SHUTDOWN:
@@ -79,6 +80,20 @@ class OpData(DptModule):
                 else:
                     self.transmit(sender, Responses.UNEXPECTED_FAILURE)
 
+            if msg[0] == Requests.NEW_TP:
+                pass
+
+            if msg[0] == Requests.ADD_TO_TP:
+                pass
+
+            if msg[0] == Requests.GET_TP:
+                hash_id = ObjectId(msg[1])
+                tp_doc = toolpaths.find_one(hash_id)
+                if tp_doc is None:
+                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_WAYPOINT))
+
+                wp_list = tp_doc["wps"]
+                self.transmit(sender, (str(hash_id), wp_list))
 
 
 

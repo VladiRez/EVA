@@ -191,9 +191,60 @@ def waypoint_detail(request, hash_id, delete=False):
 
 
 def create_toolpath(request):
-    return HttpResponse("Not yet implemented")
+    ui_module.flush_queue()
+    ui_module.transmit("op_data", (Requests.GET_ALL_WP_IDS,))
+    errors = []
+    wp_tuple = None
+    #wp_dict = None
+    try:
+        (sender, (ids, names)) = ui_module.receive(from_sender="op_data", timeout=100)
+        wp_tuple = zip(ids, names)
+        #wp_dict = {wp_id: name for (wp_id, name) in wp_tuple}
+    except ReceiveTimeoutException:
+        errors.append("Timeout: No response from Database")
+
+    ui_module.flush_queue()
+    ui_module.transmit("op_data", (Requests.GET_TP, "62f501fd498cc3cb66b88f89"))
+    wp_list = None
+    try:
+        (sender, (tp_id, wp_id_list)) = ui_module.receive(from_sender="op_data", timeout=100)
+    except ReceiveTimeoutException:
+        errors.append("Timeout: No response from Database")
+
+
+
+    # PROCESS POSTS
+    ##############################################################################################
+
+    if request.method == "POST":
+        if "execute" in request.POST:
+            wp_list = []
+            for i, wp_id in enumerate(wp_id_list):
+                ui_module.flush_queue()
+                ui_module.transmit("op_data", (Requests.GET_WP, wp_id))
+                try:
+                    (sender, msg) = ui_module.receive(from_sender="op_data", timeout=100)
+                    (hash_id, name, joint_angles, creation_time) = msg
+                except ReceiveTimeoutException:
+                    errors.append("Timeout: No response from Database")
+                wp_list.append({"label_id": i, "joints": joint_angles})
+            try:
+                ui_module.transmit("eva_interface", (Requests.EXECUTE_TP, wp_list))
+            except ReceiveTimeoutException:
+                errors.append("Timeout: No response from EVA INTERFACE")
+
+    select_wp_form = SelectWaypointForm(tuple(wp_tuple))
+
+    context = {"select_wp_form": select_wp_form, "wp_list": wp_id_list}
+
+    return render(request, "toolpath_manager/toolpath_editor.html", context=context)
 
 
 class ChangeNameForm(forms.Form):
     new_name = forms.CharField(label="Name ändern: ", max_length=80)
 
+
+class SelectWaypointForm(forms.Form):
+    def __init__(self, choices):
+        super().__init__()
+        self.fields["select_wp"] = forms.ChoiceField(choices=choices)

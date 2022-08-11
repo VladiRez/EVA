@@ -91,6 +91,41 @@ class EvaInterface(DptModule):
                 else:
                     self.transmit(sender, Responses.LOCK_FAILED)
 
+            elif msg[0] == Requests.EXECUTE_TP:
+                wp_list = msg[1]
+
+                timeline = [{
+                        "type": "home",
+                        "waypoint_id": wp_list[0]["label_id"]
+                    }]
+                timeline_residuum = [{"type": "trajectory", "trajectory": "joint_space", "waypoint_id": wp["label_id"]} for wp in wp_list]
+                timeline = timeline + timeline_residuum
+
+                next_wp_id = wp_list[-1]["label_id"] + 1
+
+                toolpath = {
+                    "metadata": {
+                        "version": 2,
+                        "default_max_speed": 0.25,
+                        "payload": 0,
+                        "analog_modes": {
+                            "i0": "voltage",
+                            "i1": "voltage",
+                            "o0": "voltage",
+                            "o1": "voltage"
+                        },
+                        "next_label_id": next_wp_id
+                    },
+                    "waypoints": wp_list,
+                    "timeline": timeline
+                }
+
+                with self.eva.lock():
+                    self.eva.control_wait_for_ready()
+                    self.eva.toolpaths_use(toolpath)
+                    self.eva.control_home()
+                    self.eva.control_run(loop=1, mode='teach')
+
             else:
                 self.transmit(sender, Responses.UNKNOWN_COMMAND)
 

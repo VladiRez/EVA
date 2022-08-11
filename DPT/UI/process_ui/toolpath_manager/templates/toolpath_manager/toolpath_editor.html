@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Toolpath Editor</title>
+</head>
+<body>
+    <h2> Waypoints in Toolpath 62f501fd498cc3cb66b88f89 </h2>
+    <ol>
+        {% for wp in wp_list %}
+            <li>{{ wp }} </li>
+        {% endfor %}
+    </ol>
+    <form action="{% url 'create_toolpath' %}" method="POST">
+        {% csrf_token %}
+        {{ select_wp_form }}
+        <input type="submit" name="add_to_tp" value="Add to toolpath"/>
+    </form>
+    <br>
+    <form action="{% url 'create_toolpath' %}" method="POST">
+        {% csrf_token %}
+        <input type="submit" name="execute" value="Execute Toolpath"/>
+    </form>
+</body>
+</html>

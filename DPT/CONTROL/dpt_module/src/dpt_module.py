@@ -177,11 +177,15 @@ class Requests(IntEnum):
     GET_ALL_WP_IDS = 2
     DEL_WP = 3
     CHANGE_WP_NAME = 4
+    NEW_TP = 5
+    ADD_TO_TP = 6
+    GET_TP = 7
 
     # Eva Requests
     BACKDRIVING_MODE = 10
     STOP_BACKDRIVING = 11
     GOTO_WP = 12
+    EXECUTE_TP = 13
 
 
 class Responses(IntEnum):
