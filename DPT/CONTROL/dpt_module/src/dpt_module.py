@@ -180,6 +180,7 @@ class Requests(IntEnum):
     NEW_TP = 5
     ADD_TO_TP = 6
     GET_TP = 7
+    RM_FROM_TP = 8
 
     # Eva Requests
     BACKDRIVING_MODE = 10
@@ -194,7 +195,7 @@ class Responses(IntEnum):
     UNKNOWN_COMMAND = -2
 
     # Database Responses
-    NONEXISTENT_WAYPOINT = -10
+    NONEXISTENT_OBJECT = -10
 
     # Eva Responses
     LOCK_FAILED = -20

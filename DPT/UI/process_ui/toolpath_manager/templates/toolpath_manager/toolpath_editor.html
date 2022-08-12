@@ -6,9 +6,25 @@
 </head>
 <body>
     <h2> Waypoints in Toolpath 62f501fd498cc3cb66b88f89 </h2>
+    {% for error in errors %}
+        <li>ERROR --- {{ error }} </li>
+    {% endfor %}
+    {% if messages %}
+        <ul class="messages">
+          {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+          {% endfor %}
+        </ul>
+    {% endif %}
     <ol>
         {% for wp in wp_list %}
-            <li>{{ wp }} </li>
+            <li><a href="{% url 'waypoint_detail' wp.0 %}">{{ wp.1 }} --- {{ wp.0 }} --- </a>
+                <form action="{% url 'create_toolpath' %}" method="POST" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="wp_index" value="{{ wp.2 }}" />
+                    <input type="submit" name="delete" value="Delete"/>
+                </form>
+            </li>
         {% endfor %}
     </ol>
     <form action="{% url 'create_toolpath' %}" method="POST">
@@ -20,6 +36,13 @@
     <form action="{% url 'create_toolpath' %}" method="POST">
         {% csrf_token %}
         <input type="submit" name="execute" value="Execute Toolpath"/>
+    </form>
+    <br>
+    <form action="{% url 'index' %}" method="GET">
+      {% csrf_token %}
+      <button type="submit">
+        Click here to go back.
+      </button>
     </form>
 </body>
 </html>
