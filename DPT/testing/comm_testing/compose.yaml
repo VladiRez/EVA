@@ -6,11 +6,15 @@ services:
       context: /home/bob/EVA/DPT/CONTROL/base_module
     image: base_module
   dealer:
+    environment:
+      - SERVICE_NAME=dealer-1
     build:
       context: ./comm1
     networks:
       - comm
   router:
+    environment:
+      - SERVICE_NAME=router-1
     build:
       context: ./comm2
     networks:
