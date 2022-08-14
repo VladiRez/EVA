@@ -40,6 +40,7 @@ class OpData(DptModule):
         while True:
 
             col_waypoints = self.db["waypoints"]
+            toolpaths = self.db["toolpaths"]
             (sender, msg) = self.receive()
 
             if msg[0] == Requests.SHUTDOWN:
@@ -55,7 +56,7 @@ class OpData(DptModule):
                 hash_id = ObjectId(msg[1])
                 wp_doc = col_waypoints.find_one(hash_id)
                 if wp_doc is None:
-                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_WAYPOINT))
+                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
 
                 wp_coor = wp_doc["coordinates"]
                 wp_name = wp_doc["wp_name"]
@@ -86,6 +87,47 @@ class OpData(DptModule):
                 else:
                     self.transmit(sender, Responses.UNEXPECTED_FAILURE)
 
+            if msg[0] == Requests.NEW_TP:
+                pass
+
+            if msg[0] == Requests.ADD_TO_TP:
+                hash_id = ObjectId(msg[1])
+                tp_doc = toolpaths.find_one(hash_id)
+                if tp_doc is None:
+                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
+
+                wp_list = tp_doc["wps"]
+                wp_list.append(msg[2])
+                new_list = {"$set": {"wps": wp_list}}
+                result = toolpaths.update_one({"_id": hash_id}, new_list)
+                if result.acknowledged and result.modified_count == 1:
+                    self.transmit(sender, Requests.ADD_TO_TP)
+                else:
+                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
+
+            if msg[0] == Requests.RM_FROM_TP:
+                hash_id = ObjectId(msg[1])
+                index = msg[2]
+                tp_doc = toolpaths.find_one(hash_id)
+                if tp_doc is None:
+                    self.transmit(sender, Responses.NONEXISTENT_OBJECT)
+                wp_list = tp_doc["wps"]
+                wp_list.pop(index)
+                new_list = {"$set": {"wps": wp_list}}
+                result = toolpaths.update_one({"_id": hash_id}, new_list)
+                if result.acknowledged and result.modified_count == 1:
+                    self.transmit(sender, Requests.RM_FROM_TP)
+                else:
+                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
+
+            if msg[0] == Requests.GET_TP:
+                hash_id = ObjectId(msg[1])
+                tp_doc = toolpaths.find_one(hash_id)
+                if tp_doc is None:
+                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
+
+                wp_list = tp_doc["wps"]
+                self.transmit(sender, (str(hash_id), wp_list))
 
 if __name__ == "__main__":
     opd = OpData()
