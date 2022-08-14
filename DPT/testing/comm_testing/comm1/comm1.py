@@ -14,7 +14,7 @@ async def sayhi():
 
 async def main():
     success = await mod.register_connection("comm_testing-router-1")
-    a = asyncio.create_task(mod.client_loop())
+    a = asyncio.create_task(mod.client_hc_loop())
     if success:
         print("connection successful")
         b = asyncio.create_task(sayhi())

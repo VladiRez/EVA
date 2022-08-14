@@ -36,6 +36,8 @@ class DptModule():
         Transmit a message to a specific server. Register connection first.
     client_receive:
         Wait for a message from a specific server. Register connection first.
+    client_hc_loop:
+        Monitors the connection status of the client sockets (health check)
 
     Server Methods:
     ---------------
@@ -53,9 +55,8 @@ class DptModule():
         queue. Flush with flush_queue. Use this queue to process messages in
         app.
 
-    client_msg_queues: dict[asyncio.Queue]
-        A dictionary containing the message queues of 
-
+    client_sockets: dict{address: str, socket: zmq.Socket}
+        dictionary that contains every client socket and its address as key
     """
 
     def __init__(self):   
@@ -183,7 +184,9 @@ class DptModule():
         msg_pyobj = json.loads(msg_json)  
         return msg_pyobj
 
-    async def client_loop(self) -> None:
+    async def client_hc_loop(self) -> None:
+        """ Monitors the connection status of the client sockets (health check)
+        """
         while True:
             await asyncio.sleep(self.client_check_connections_interval)
             for (address, hc_socket) in self.client_hc_sockets.items():
@@ -191,7 +194,7 @@ class DptModule():
                 event = await hc_socket.poll(timeout=100)
                 if event == zmq.POLLIN:
                     msg = await hc_socket.recv()
-                    if address in self.interrupted_sockets:
+                    if address in self.interrupted_sockets and msg == b"connection_alive":
                         logging.info(f"Connection reestablished to {address}")
                         self.interrupted_sockets.remove(address)
                     continue
@@ -216,8 +219,7 @@ class DptModule():
         await self.flush_server_socket()
         while True:
             (sender, msg_bytes) = await self.server_socket.recv_multipart()
-            
-            logging.info(msg_bytes)
+
             if msg_bytes == b"confirm_connection":
                 await self.server_socket.send_multipart([sender, b"connection_confirmed"])
                 logging.info(f"Incoming connection established from {sender}")
