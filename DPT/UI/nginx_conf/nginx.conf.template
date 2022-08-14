@@ -29,7 +29,7 @@ http {
     # server unix:/tmp/gunicorn.sock fail_timeout=0;
 
     # for a TCP configuration
-    server DPT_process-ui:8000 fail_timeout=0;
+    server ${APP_SERVER_ADDR} fail_timeout=0;
   }
 
   #server {

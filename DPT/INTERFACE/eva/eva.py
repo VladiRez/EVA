@@ -12,6 +12,8 @@ from evasdk import Eva
 from evasdk.eva_locker import EvaWithLocker
 import logging
 import signal
+import asyncio
+import os
 from threading import Thread, Lock, Event
 
 from dpt_module import DptModule, Requests, Responses
@@ -23,44 +25,36 @@ class EvaInterface(DptModule):
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGTERM, self.shutdown)
+        #signal.signal(signal.SIGINT, self.shutdown)
+        #signal.signal(signal.SIGTERM, self.shutdown)
 
-        super().__init__("eva_interface")
+        super().__init__()
 
         host = '192.168.152.106'
         token = '1c097cb9874f6c5e66beb0aba2123eb4038c2a19'
 
         self.eva = Eva(host, token)
-        self.abort = Event()
 
-        self.backdriving_abort = Event()
-        self.listening_thread = Thread(target=self.listen_stop_backdriving)
+        self.backdriving_abort = asyncio.Event()
 
-        self.listen()
+        self.OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
+        self.register_connection(self.OP_DATA_ADDR)
+        asyncio.run(self.entrypoint())
 
-    # Define methods for usage of EvaInterface object with a context manager ("with" statement)
-    def __enter__(self):
-        return self
+    async def entrypoint(self):
+        server_loop_task = asyncio.create_task(self.server_loop())
+        service_loop_task = asyncio.create_task(self.service_loop())
+        await asyncio.gather(server_loop_task, service_loop_task)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.shutdown()
-
-    def shutdown(self):
-        self.abort.set()
-        super().shutdown()
-        if self.listening_thread.is_alive():
-            self.listening_thread.join()
-
-    def listen(self) -> None:
+    async def service_loop(self) -> None:
         """
         Loop for listening to incoming requests.
         Expects a tuple with the first entry being the request type.
         """
 
-        while not self.abort.is_set():
+        while True:
             try:
-                (sender, msg) = self.receive()
+                (sender, msg) = await self.server_receive()
 
             # Abort when module is being terminated
             except zmq.ContextTerminated:
@@ -76,20 +70,20 @@ class EvaInterface(DptModule):
                 break
 
             elif msg[0] == Requests.BACKDRIVING_MODE:
-                self.backdriving_mode(sender)
+                self.backdriving_task = create_task(self.backdriving(sender))
 
             elif msg[0] == Requests.STOP_BACKDRIVING:
                 self.backdriving_abort.set()
-                self.backdriving_thread.join()
-                self.transmit(sender, Requests.STOP_BACKDRIVING)
+                await self.backdriving_task
+                await self.server_transmit(sender, Requests.STOP_BACKDRIVING)
 
             elif msg[0] == Requests.GOTO_WP:
                 joint_angles = msg[1]
                 lock_success = self.goto_wp(joint_angles)
                 if lock_success:
-                    self.transmit(sender, Requests.GOTO_WP)
+                    await self.server_transmit(sender, Requests.GOTO_WP)
                 else:
-                    self.transmit(sender, Responses.LOCK_FAILED)
+                    await self.server_transmit(sender, Responses.LOCK_FAILED)
 
             elif msg[0] == Requests.EXECUTE_TP:
                 wp_list = msg[1]
@@ -127,7 +121,7 @@ class EvaInterface(DptModule):
                     self.eva.control_run(loop=1, mode='teach')
 
             else:
-                self.transmit(sender, Responses.UNKNOWN_COMMAND)
+                await self.server_transmit(sender, Responses.UNKNOWN_COMMAND)
 
     def goto_wp(self, joint_angles: list[float]) -> bool:
         """
@@ -143,7 +137,7 @@ class EvaInterface(DptModule):
 
         return lock_success
 
-    def backdriving_mode(self, sender: str) -> None:
+    async def backdriving(self, sender: str) -> None:
         """
         Listen to EVA waypoint button press, send waypoint to self.set_waypoint method.
 
@@ -151,10 +145,6 @@ class EvaInterface(DptModule):
         """
         # Clear the backdriving events
         self.backdriving_abort.clear()
-
-        # Thread to listen to the stop command
-        self.listening_thread = Thread(target=self.listen_stop_backdriving)
-        self.listening_thread.start()
 
         success = False
         with self.eva.lock() as eva, self.eva.websocket() as ws:
@@ -169,16 +159,15 @@ class EvaInterface(DptModule):
             # Context to change the lock renew period
             with EvaWithLocker(eva, fallback_renew_period=2):
                 success = True
-                self.transmit(sender, Requests.BACKDRIVING_MODE)
-                self.backdriving_abort.wait()
-                self.transmit(sender, Requests.STOP_BACKDRIVING)
-                self.listening_thread.join()
+                await self.server_transmit(sender, Requests.BACKDRIVING_MODE)
+                await self.backdriving_abort.wait()
+                await self.server_transmit(sender, Requests.STOP_BACKDRIVING)
 
         if not success:
-            self.transmit(sender, Responses.LOCK_FAILED)
+            await self.server_transmit(sender, Responses.LOCK_FAILED)
 
-    def new_waypoint(self, waypoint: dict[str, object]):
-        self.transmit("op_data", (Requests.NEW_WP, waypoint["waypoint"]))
+    async def new_waypoint(self, waypoint: dict[str, object]):
+        await self.server_transmit(self.OP_DATA_ADDR, (Requests.NEW_WP, waypoint["waypoint"]))
         pass
 
     def goto_zero(self):
@@ -186,20 +175,21 @@ class EvaInterface(DptModule):
             self.eva.control_wait_for_ready()
             self.eva.control_go_to([0, 0, 0, 0, 0, 0], mode='teach')
 
-    def make_toolpath(self, path: tuple[int]):
+    async def make_toolpath(self, path: tuple[int]):
         """
 
         Raises:
         -------
         ReceiveTimoutException: If Database could not be reached
         """
-
-        waypoints = []
+        
+        return
+        """ waypoints = []
         unique_wps = set(path)
         for i in unique_wps:
-            self.transmit("op_data", ("Get WP", i))
+            await self.server_transmit("op_data", ("Get WP", i))
             # received wp: (wp_id, coordinates)
-            (sender, wp) = self.receive(from_sender="op_data", timeout=1000)
+            (sender, wp) = await self.server_receive(timeout=1000)
             waypoints.append({"label_id": i, "joints": wp[1]})
 
         toolpath = {
@@ -220,38 +210,8 @@ class EvaInterface(DptModule):
 
         self.logger.debug(toolpath)
 
-        self.eva.toolpaths_save("PyTest", toolpath)
+        self.eva.toolpaths_save("PyTest", toolpath) """
 
-
-
-    # Threaded methods, these have to be thread-safe
-    ###############################################################################################
-
-    def listen_stop_backdriving(self):
-        """
-        Loop for listening to incoming requests to stop backdriving.
-        """
-
-        while not self.abort.is_set():
-            try:
-                (sender, msg) = self.receive()
-
-            # Abort when module is being terminated
-            except zmq.ContextTerminated:
-                break
-            except zmq.error.ZMQError as e:
-                if e.errno == zmq.Event.CLOSED.value:
-                    break
-                else:
-                    raise e
-
-            if msg == Requests.SHUTDOWN:
-                self.shutdown()
-                break
-
-            elif msg == Requests.STOP_BACKDRIVING:
-                self.backdriving_abort.set()
-                break
 
 
     # STATIC METHODS

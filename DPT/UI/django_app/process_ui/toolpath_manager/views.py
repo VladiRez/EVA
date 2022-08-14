@@ -5,39 +5,42 @@ from django import forms
 
 import time
 import os
+import asyncio
+import logging
 
-from dpt_module import DptModule, Requests, Responses, ReceiveTimeoutException
-
-ui_module = DptModule("ui")
+from dpt_module import DptModule, Requests, Responses, BaseModuleException
 
 OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
 EVA_INTERFACE_ADDR = os.environ["EVA_INTERFACE_ADDR"]
 
-def index(request, reset=False):
+ui_module = DptModule()
+ui_module.register_connection(OP_DATA_ADDR)
+ui_module.register_connection(EVA_INTERFACE_ADDR)
+
+async def index(request, reset=False):
     """
     Main Landing Page for the EVA UI
     """
 
-    ui_module.flush_queue()
-    ui_module.transmit(OP_DATA_ADDR, (Requests.GET_ALL_WP_IDS,))
+    await ui_module.client_transmit(OP_DATA_ADDR, (Requests.GET_ALL_WP_IDS,))
     errors = []
     wp_tuple = None
 
     try:
-        (sender, (ids, names)) = ui_module.receive(timeout=100)
+        (ids, names) = await ui_module.client_receive(OP_DATA_ADDR, timeout=1000)
         wp_tuple = zip(ids, names)
-    except ReceiveTimeoutException:
+    except BaseModuleException as e:
+        logging.info(str(e))
         errors.append("Timeout: No response from Database")
 
     if reset:
-        ui_module.transmit("eva_interface", Requests.STOP_BACKDRIVING)
+        await ui_module.client_transmit(EVA_INTERFACE_ADDR, Requests.STOP_BACKDRIVING)
 
         try:
-            (sender, conf) = ui_module.receive(expected_msg=(Requests.STOP_BACKDRIVING,), 
-                                               timeout=10000)
+            (sender, conf) = await ui_module.client_receive(EVA_INTERFACE_ADDR, timeout=10000)
             if conf == Requests.STOP_BACKDRIVING:
                 messages.info(request, "Successfully unlocked EVA.")
-        except ReceiveTimeoutException:
+        except BaseModuleException:
             errors.append("Failed to unlock EVA.")
 
 
@@ -51,14 +54,13 @@ def backdriving(request):
     the databse.
     """
 
-    ui_module.flush_queue()
     ui_module.transmit(EVA_INTERFACE_ADDR, (Requests.BACKDRIVING_MODE,))
     errors = []
     confirmation = None
     try:
         (sender, confirmation) = ui_module.receive(timeout=10000)
 
-    except ReceiveTimeoutException:
+    except BaseModuleException:
         errors.append("Timeout: No Response from EVA_INTERFACE")
 
     # What if an unexpected response is received
@@ -82,7 +84,6 @@ def waypoint_detail(request, hash_id, delete=False):
     # INIT
     ##############################################################################################
 
-    ui_module.flush_queue()
     ui_module.transmit(OP_DATA_ADDR, (Requests.GET_WP, hash_id))
     errors = []
     joint_angles = None
@@ -108,7 +109,7 @@ def waypoint_detail(request, hash_id, delete=False):
         if ret_hash_id != hash_id:
             errors.append("Wrong Waypoint received from Database")
 
-    except ReceiveTimeoutException:
+    except BaseModuleException:
         errors.append("Timeout: No Response from Database")
 
 
@@ -128,7 +129,7 @@ def waypoint_detail(request, hash_id, delete=False):
                 else:
                     errors.append(request, "Could not delete waypoint.")
 
-            except ReceiveTimeoutException:
+            except BaseModuleException:
                 errors.append("Timeout: No Response from Database")
 
         elif "change_name" in request.POST:
@@ -150,7 +151,7 @@ def waypoint_detail(request, hash_id, delete=False):
                     else:
                         messages.info(request, "Name changed successfully!")
 
-                except ReceiveTimeoutException:
+                except BaseModuleException:
                     errors.append("Timeout: No Response from Database")
 
         elif "goto" in request.POST:
@@ -166,7 +167,7 @@ def waypoint_detail(request, hash_id, delete=False):
                     else:
                         errors.append("Error: Could not get EVA Lock")
 
-                except ReceiveTimeoutException:
+                except BaseModuleException:
                     errors.append("Timeout: No Response from Eva_Interface")
             else:
                 errors.append("Error getting joint angles.")
@@ -196,7 +197,6 @@ def create_toolpath(request):
     errors = []
 
     # Get all waypoint ids and names from DB for the selection box
-    ui_module.flush_queue()
     ui_module.transmit("op_data", (Requests.GET_ALL_WP_IDS,))
     wp_tuple = None
     wp_dict = None
@@ -204,16 +204,15 @@ def create_toolpath(request):
         (sender, (ids, names)) = ui_module.receive(from_sender="op_data", timeout=100)
         wp_tuple = tuple(zip(ids, names))
         wp_dict = {wp_id: name for (wp_id, name) in wp_tuple}
-    except ReceiveTimeoutException:
+    except BaseModuleException:
         errors.append("Timeout: No response from Database")
 
     # Get list of waypoints in the toolpath
-    ui_module.flush_queue()
     ui_module.transmit("op_data", (Requests.GET_TP, "62f501fd498cc3cb66b88f89"))
     wp_id_list = None
     try:
         (sender, (tp_id, wp_id_list)) = ui_module.receive(from_sender="op_data", timeout=100)
-    except ReceiveTimeoutException:
+    except BaseModuleException:
         errors.append("Timeout: No response from Database")
 
     # PROCESS POSTS
@@ -223,17 +222,16 @@ def create_toolpath(request):
         if "execute" in request.POST:
             wp_list_markup = []
             for i, wp_id in enumerate(wp_id_list):
-                ui_module.flush_queue()
                 ui_module.transmit("op_data", (Requests.GET_WP, wp_id))
                 try:
                     (sender, msg) = ui_module.receive(from_sender="op_data", timeout=100)
                     (hash_id, name, joint_angles, creation_time) = msg
-                except ReceiveTimeoutException:
+                except BaseModuleException:
                     errors.append("Timeout: No response from Database")
                 wp_list_markup.append({"label_id": i, "joints": joint_angles})
             try:
                 ui_module.transmit("eva_interface", (Requests.EXECUTE_TP, wp_list_markup))
-            except ReceiveTimeoutException:
+            except BaseModuleException:
                 errors.append("Timeout: No response from EVA INTERFACE")
         elif "add_to_tp" in request.POST:
             #select_wp_form = SelectWaypointForm(request.POST)
@@ -242,7 +240,6 @@ def create_toolpath(request):
             #else:
             #wp_to_add = select_wp_form.data["select_wp"]
             wp_to_add = request.POST.get("select_wp")
-            ui_module.flush_queue()
             ui_module.transmit("op_data", (Requests.ADD_TO_TP, "62f501fd498cc3cb66b88f89",
                                            wp_to_add))
             try:
@@ -252,7 +249,7 @@ def create_toolpath(request):
                     messages.info(request, "Waypoint successfully added.")
                 else:
                     errors.append("Error adding WP to Toolpath")
-            except ReceiveTimeoutException:
+            except BaseModuleException:
                 errors.append("Timeout: No response from Database")
         elif "delete" in request.POST:
             try:
@@ -267,7 +264,7 @@ def create_toolpath(request):
                 else:
                     errors.append("Could not delete waypoint.")
 
-            except ReceiveTimeoutException:
+            except BaseModuleException:
                 errors.append("Timeout: No Response from Database")
 
     wp_list = ((wp_id, wp_dict[wp_id], i) for (i, wp_id) in enumerate(wp_id_list))

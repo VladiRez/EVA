@@ -9,6 +9,7 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 import time
 import logging
+import asyncio
 import os
 
 
@@ -27,11 +28,19 @@ class OpData(DptModule):
         self.client = MongoClient(db_address)
         self.db = self.client["dpt_op_data"]
 
-        super().__init__("op_data")
+        super().__init__()
+        asyncio.run(self.entrypoint())
+        
 
-        self.listen()
+    async def entrypoint(self):
+        """ Asynchronous entrypoint to be used with asyncio.run()
+        """
+        task_server_loop = asyncio.create_task(self.server_loop())
+        task_service_loop = asyncio.create_task(self.service_loop())
 
-    def listen(self) -> None:
+        await asyncio.gather(task_server_loop, task_service_loop)
+
+    async def service_loop(self) -> None:
         """
         Loop for listening to incoming requests.
         Expects a tuple with the first entry being the request type.
@@ -41,7 +50,7 @@ class OpData(DptModule):
 
             col_waypoints = self.db["waypoints"]
             toolpaths = self.db["toolpaths"]
-            (sender, msg) = self.receive()
+            (sender, msg) = await self.server_receive()
 
             if msg[0] == Requests.SHUTDOWN:
                 break
@@ -56,36 +65,36 @@ class OpData(DptModule):
                 hash_id = ObjectId(msg[1])
                 wp_doc = col_waypoints.find_one(hash_id)
                 if wp_doc is None:
-                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
+                    await self.server_transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
 
                 wp_coor = wp_doc["coordinates"]
                 wp_name = wp_doc["wp_name"]
                 wp_time = wp_doc["creation_time"]
-                self.transmit(sender, (str(hash_id), wp_name, wp_coor, wp_time))
+                await self.server_transmit(sender, (str(hash_id), wp_name, wp_coor, wp_time))
 
             elif msg[0] == Requests.GET_ALL_WP_IDS:
                 all_wps_cursor = col_waypoints.find({})
                 wp_all_ids = [str(wp["_id"]) for wp in all_wps_cursor]
                 all_wps_cursor = col_waypoints.find({})
                 wp_all_names = [wp["wp_name"] for wp in all_wps_cursor]
-                self.transmit(sender, (wp_all_ids, wp_all_names))
+                await self.server_transmit(sender, (wp_all_ids, wp_all_names))
 
             elif msg[0] == Requests.DEL_WP:
                 hash_id = ObjectId(msg[1])
                 result = col_waypoints.delete_one({"_id": hash_id})
                 if result.acknowledged and result.deleted_count == 1:
-                    self.transmit(sender, Requests.DEL_WP)
+                    await self.server_transmit(sender, Requests.DEL_WP)
                 else:
-                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
+                    await self.server_transmit(sender, Responses.UNEXPECTED_FAILURE)
 
             elif msg[0] == Requests.CHANGE_WP_NAME:
                 hash_id = ObjectId(msg[1])
                 new_value = {"$set": {"wp_name": msg[2]}}
                 result = col_waypoints.update_one({"_id": hash_id}, new_value)
                 if result.acknowledged and result.modified_count == 1:
-                    self.transmit(sender, Requests.CHANGE_WP_NAME)
+                    await self.server_transmit(sender, Requests.CHANGE_WP_NAME)
                 else:
-                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
+                    await self.server_transmit(sender, Responses.UNEXPECTED_FAILURE)
 
             if msg[0] == Requests.NEW_TP:
                 pass
@@ -94,40 +103,40 @@ class OpData(DptModule):
                 hash_id = ObjectId(msg[1])
                 tp_doc = toolpaths.find_one(hash_id)
                 if tp_doc is None:
-                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
+                    await self.server_transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
 
                 wp_list = tp_doc["wps"]
                 wp_list.append(msg[2])
                 new_list = {"$set": {"wps": wp_list}}
                 result = toolpaths.update_one({"_id": hash_id}, new_list)
                 if result.acknowledged and result.modified_count == 1:
-                    self.transmit(sender, Requests.ADD_TO_TP)
+                    await self.server_transmit(sender, Requests.ADD_TO_TP)
                 else:
-                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
+                    await self.server_transmit(sender, Responses.UNEXPECTED_FAILURE)
 
             if msg[0] == Requests.RM_FROM_TP:
                 hash_id = ObjectId(msg[1])
                 index = msg[2]
                 tp_doc = toolpaths.find_one(hash_id)
                 if tp_doc is None:
-                    self.transmit(sender, Responses.NONEXISTENT_OBJECT)
+                    await self.server_transmit(sender, Responses.NONEXISTENT_OBJECT)
                 wp_list = tp_doc["wps"]
                 wp_list.pop(index)
                 new_list = {"$set": {"wps": wp_list}}
                 result = toolpaths.update_one({"_id": hash_id}, new_list)
                 if result.acknowledged and result.modified_count == 1:
-                    self.transmit(sender, Requests.RM_FROM_TP)
+                    await self.server_transmit(sender, Requests.RM_FROM_TP)
                 else:
-                    self.transmit(sender, Responses.UNEXPECTED_FAILURE)
+                    await self.server_transmit(sender, Responses.UNEXPECTED_FAILURE)
 
             if msg[0] == Requests.GET_TP:
                 hash_id = ObjectId(msg[1])
                 tp_doc = toolpaths.find_one(hash_id)
                 if tp_doc is None:
-                    self.transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
+                    await self.server_transmit(sender, (str(hash_id), Responses.NONEXISTENT_OBJECT))
 
                 wp_list = tp_doc["wps"]
-                self.transmit(sender, (str(hash_id), wp_list))
+                await self.server_transmit(sender, (str(hash_id), wp_list))
 
 if __name__ == "__main__":
     opd = OpData()

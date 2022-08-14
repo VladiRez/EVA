@@ -12,6 +12,7 @@ import json
 import time
 import os
 import asyncio
+import random
 from enum import IntEnum
 
 class DptModule():
@@ -65,8 +66,8 @@ class DptModule():
                             level=logging.INFO)
 
         self.zmq_port = os.environ["ZMQ_PORT"]
-        unique_id = hash(time.time())
-        self.name = os.environ["SERVICE_NAME"] + str(unique_id)
+        unique_id = hash(time.time() + random.randint(0, 1024))
+        self.name = os.environ["MODULE_NAME"] + str(unique_id)
         
         # ZeroMQ Setup        
         self.context = zmq.asyncio.Context()
@@ -76,27 +77,23 @@ class DptModule():
         self.server_socket.bind(f"tcp://*:{self.zmq_port}")
 
         self.server_msg_queue = asyncio.Queue()
+        self.server_connected_addr = []
+
         self.interrupted_sockets = []
 
         self.client_check_connections_interval = 3
 
         logging.info(f"Started Service")
-        logging.info(f"Running server_socket with address \
-            {str(self.server_socket.get(zmq.IDENTITY))}")
 
     # CLIENT METHODS
     ##########################################################################
 
-    async def register_connection(self, address: str) -> bool:
+    def register_connection(self, address: str):
         """ Connects to a server (dpt module).
 
         Parameters:
         -----------
         address: Either the ip address or the DNS domain name
-
-        Returns:
-        --------
-        success: True if the connection was confirmed by the server
         """
 
 
@@ -104,26 +101,17 @@ class DptModule():
         new_socket.setsockopt(zmq.LINGER, 0)
         new_socket.setsockopt_string(zmq.IDENTITY, self.name)
         new_socket.connect(f"tcp://{address}:{self.zmq_port}")
-        await new_socket.send(b"confirm_connection")
-
-        event = await new_socket.poll(timeout=100)
-        if event != zmq.POLLIN:
-            new_socket.close()
-            return False
-        if await new_socket.recv() != b"connection_confirmed":
-            new_socket.close()
-            return False
-
-        logging.info(f"Outgoing connection established to {address}")
+        
         self.client_sockets[address] = new_socket 
 
         health_check_socket = self.context.socket(zmq.DEALER)
         health_check_socket.setsockopt(zmq.LINGER, 0)
         health_check_socket.setsockopt_string(zmq.IDENTITY, self.name+"_hc")
         health_check_socket.connect(f"tcp://{address}:{self.zmq_port}")
+
         self.client_hc_sockets[address] = health_check_socket
                  
-        return True
+        return
 
     async def client_transmit(self, address: str, message: object) -> None:
         """Transmits message to server. 
@@ -176,7 +164,7 @@ class DptModule():
         event = await sock.poll(timeout=timeout)
         if event != zmq.POLLIN:
             raise BaseModuleException(
-                f"Timeout while receiving message on client socket (to f{address}).")
+                f"Timeout while receiving message on client socket (from {address}).")
 
         msg_bytes = await sock.recv()
         msg_json = msg_bytes.decode('ascii')
@@ -220,12 +208,11 @@ class DptModule():
         while True:
             (sender, msg_bytes) = await self.server_socket.recv_multipart()
 
-            if msg_bytes == b"confirm_connection":
-                await self.server_socket.send_multipart([sender, b"connection_confirmed"])
-                logging.info(f"Incoming connection established from {sender}")
-                continue
-            elif msg_bytes == b"check_connection":
+            if msg_bytes == b"check_connection":
                 await self.server_socket.send_multipart([sender, b"connection_alive"])
+                if sender not in self.server_connected_addr:
+                    self.server_connected_addr.append(sender)
+                    logging.info(f"Incoming connection established from {sender}")
                 continue
 
             msg_json = msg_bytes.decode('ascii')
@@ -249,8 +236,10 @@ class DptModule():
         logging.info(f"Sending message: {message} to {address}")
         await self.server_socket.send_multipart([address, msg_bytes])
 
+
     async def server_receive(self) -> tuple[bytes, object]:
         return await self.server_msg_queue.get()
+        
 
     def flush_server_queue(self) -> None:
         """
