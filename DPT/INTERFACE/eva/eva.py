@@ -6,123 +6,120 @@ https://eva-python-sdk.readthedocs.io/en/docs-development/
 
 author: robert.knobloch@stud.tu-darmstadt.de
 """
-import requests.exceptions
-import zmq
+
+import os
+import logging
+import asyncio
+
 from evasdk import Eva
 from evasdk.eva_locker import EvaWithLocker
-import logging
-import signal
-import asyncio
-import os
-from threading import Thread, Lock, Event
 
 from base_module import BaseModule
 
-logging.basicConfig(level=logging.DEBUG)
-
 
 class EvaInterface(BaseModule):
+    """ Class for Interfacing with the EVA Automata Robot
+
+    Service requests:
+    -----------------
+    BACKDRIVING_MODE, STOP_BACKDRIVING, GOTO_WP, EXECUTE_TP
+    
+    """
 
     def __init__(self):
-        self.logger = logging.getLogger(__name__)
-        #signal.signal(signal.SIGINT, self.shutdown)
-        #signal.signal(signal.SIGTERM, self.shutdown)
-
         super().__init__()
 
+        self.OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
+        self.register_connection(self.OP_DATA_ADDR) 
+
+        # Eva Setup
         host = '192.168.152.106'
         token = '1c097cb9874f6c5e66beb0aba2123eb4038c2a19'
-
         self.eva = Eva(host, token)
 
-        self.backdriving_abort = asyncio.Event()
+        self.backdriving_task = None
 
-        self.OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
-        self.register_connection(self.OP_DATA_ADDR)
         asyncio.run(self.entrypoint())
 
     async def entrypoint(self):
         service_loop_task = asyncio.create_task(self.service_loop())
-        await service_loop_task
+        await self.shutdown_signal.wait()
+        service_loop_task.cancel()
+        try:
+            await service_loop_task
+        except asyncio.CancelledError:
+            logging.info("Successfully shut down. Goodbye.")
+
 
     async def service_loop(self) -> None:
-        """
-        Loop for listening to incoming requests.
+        """ Loop for listening to incoming requests.
         Expects a tuple with the first entry being the request type.
         """
 
         while True:
-            try:
-                (sender, msg) = await self.server_receive()
+            (sender, msg) = await self.server_receive()
 
-            # Abort when module is being terminated
-            except zmq.ContextTerminated:
-                break
-            except zmq.error.ZMQError as e:
-                if e.errno == zmq.Event.CLOSED.value:
-                    break
-                else:
-                    raise e
+            match msg:
+                case ["BACKDRIVING_MODE"]:
+                    if self.backdriving_task is not None:
+                        await self.server_transmit(sender, ("ALREADY_IN_BACKDRIVING_MODE",))
+                        continue
+                    self.backdriving_task = asyncio.create_task(self.backdriving(sender))
 
-            request = msg[0]
+                case ["STOP_BACKDRIVING"]:
+                    if self.backdriving_task is None:
+                        await self.server_transmit(sender, ("NOT_IN_BACKDRIVING_MODE",))
+                        continue
+                    self.backdriving_task.cancel()
+                    try:
+                        await self.backdriving_task
+                    except asyncio.CancelledError:
+                        # Successfully stopped backdriving
+                        self.backdriving_task = None
+                        await self.server_transmit(sender, ("STOP_BACKDRIVING",))
 
-            if request == "SHUTDOWN":
-                self.shutdown()
-                break
+                case ["GOTO_WP", joint_angles]:
+                    lock_success = self.goto_wp(joint_angles)
+                    if lock_success:
+                        await self.server_transmit(sender, ("GOTO_WP",))
+                    else:
+                        await self.server_transmit(sender, ("LOCK_FAILED",))
 
-            elif request == "BACKDRIVING_MODE":
-                self.backdriving_task = create_task(self.backdriving(sender))
+                case ["EXECUTE_TP", wp_list]:
+                    timeline = [{
+                            "type": "home",
+                            "waypoint_id": wp_list[0]["label_id"]
+                        }]
+                    timeline_residuum = [{"type": "trajectory", "trajectory": "joint_space", "waypoint_id": wp["label_id"]} for wp in wp_list]
+                    timeline = timeline + timeline_residuum
 
-            elif request == "STOP_BACKDRIVING":
-                self.backdriving_abort.set()
-                await self.backdriving_task
-                await self.server_transmit(sender, ("STOP_BACKDRIVING",))
+                    next_wp_id = wp_list[-1]["label_id"] + 1
 
-            elif request == "GOTO_WP":
-                joint_angles = msg[1]
-                lock_success = self.goto_wp(joint_angles)
-                if lock_success:
-                    await self.server_transmit(sender, ("GOTO_WP",))
-                else:
-                    await self.server_transmit(sender, ("LOCK_FAILED",))
-
-            elif request == "EXECUTE_TP":
-                wp_list = msg[1]
-
-                timeline = [{
-                        "type": "home",
-                        "waypoint_id": wp_list[0]["label_id"]
-                    }]
-                timeline_residuum = [{"type": "trajectory", "trajectory": "joint_space", "waypoint_id": wp["label_id"]} for wp in wp_list]
-                timeline = timeline + timeline_residuum
-
-                next_wp_id = wp_list[-1]["label_id"] + 1
-
-                toolpath = {
-                    "metadata": {
-                        "version": 2,
-                        "default_max_speed": 0.25,
-                        "payload": 0,
-                        "analog_modes": {
-                            "i0": "voltage",
-                            "i1": "voltage",
-                            "o0": "voltage",
-                            "o1": "voltage"
+                    toolpath = {
+                        "metadata": {
+                            "version": 2,
+                            "default_max_speed": 0.25,
+                            "payload": 0,
+                            "analog_modes": {
+                                "i0": "voltage",
+                                "i1": "voltage",
+                                "o0": "voltage",
+                                "o1": "voltage"
+                            },
+                            "next_label_id": next_wp_id
                         },
-                        "next_label_id": next_wp_id
-                    },
-                    "waypoints": wp_list,
-                    "timeline": timeline
-                }
+                        "waypoints": wp_list,
+                        "timeline": timeline
+                    }
 
-                with self.eva.lock():
-                    self.eva.control_wait_for_ready()
-                    self.eva.toolpaths_use(toolpath)
-                    self.eva.control_home()
-                    self.eva.control_run(loop=1, mode='teach')
+                    with self.eva.lock():
+                        self.eva.control_wait_for_ready()
+                        self.eva.toolpaths_use(toolpath)
+                        self.eva.control_home()
+                        self.eva.control_run(loop=1, mode='teach')
 
-            else:
-                await self.server_transmit(sender, ("UNKNOWN_COMMAND",))
+                case _:
+                    await self.server_transmit(sender, ("UNKNOWN_REQUEST",))
 
     def goto_wp(self, joint_angles: list[float]) -> bool:
         """
@@ -152,17 +149,22 @@ class EvaInterface(BaseModule):
 
             # Execute method new_waypoint and pass the waypoint when the waypoint button is pressed
             # (see eva websocket docs)
-            ws.register("backdriving", self.new_waypoint)
-
-            # Uncomment to monitor robot state
-            # ws.register("state_change", self.print_state)
+            ws.register("backdriving", await self.new_waypoint)
 
             # Context to change the lock renew period
             with EvaWithLocker(eva, fallback_renew_period=2):
                 success = True
+                # Confirm successful backdriving
                 await self.server_transmit(sender, ("BACKDRIVING_MODE",))
-                await self.backdriving_abort.wait()
-                await self.server_transmit(sender, ("STOP_BACKDRIVING",))
+
+                # Keep in loop until task is cancelled
+                try:
+                    while True:
+                        await asyncio.sleep(1)
+                except asyncio.CancelledError:
+                    # Confirm abort backdriving
+                    await self.server_transmit(sender, ("STOP_BACKDRIVING",))
+                    raise
 
         if not success:
             await self.server_transmit(sender, ("LOCK_FAILED",))
@@ -175,58 +177,6 @@ class EvaInterface(BaseModule):
         with self.eva.lock():
             self.eva.control_wait_for_ready()
             self.eva.control_go_to([0, 0, 0, 0, 0, 0], mode='teach')
-
-    async def make_toolpath(self, path: tuple[int]):
-        """
-
-        Raises:
-        -------
-        ReceiveTimoutException: If Database could not be reached
-        """
-        
-        return
-        """ waypoints = []
-        unique_wps = set(path)
-        for i in unique_wps:
-            await self.server_transmit("op_data", ("Get WP", i))
-            # received wp: (wp_id, coordinates)
-            (sender, wp) = await self.server_receive(timeout=1000)
-            waypoints.append({"label_id": i, "joints": wp[1]})
-
-        toolpath = {
-            "metadata": {
-                "version": 2,
-                "default_max_speed": 0.2,
-                "analog_modes": {"i0": "voltage", "i1": "voltage", "o0": "voltage", "o1": "voltage"},
-                "next_label_id": 3,
-                "payload": 0
-            },
-            "timeline": [
-                {"type": "home", "waypoint_id": 0},
-                {"type": "trajectory", "trajectory": "joint_space", "waypoint_id": 1, "time": 2},
-                {"type": "trajectory", "trajectory": "joint_space", "waypoint_id": 2}
-            ],
-            "waypoints": waypoints
-        }
-
-        self.logger.debug(toolpath)
-
-        self.eva.toolpaths_save("PyTest", toolpath) """
-
-
-
-    # STATIC METHODS
-    ###############################################################################################
-
-    @staticmethod
-    def print_state(msg):
-        # Several state changes should be ignored because they happen so often and
-        # clutter the logs
-        if "servos.telemetry.position" not in msg["changes"] \
-                and "global.inputs" not in msg["changes"] \
-                and "servos.telemetry.temperature" not in msg["changes"]:
-
-            print(msg)
 
 
 if __name__ == "__main__":

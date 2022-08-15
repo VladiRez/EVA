@@ -5,15 +5,16 @@ Base module for all DPT modules. The main purpose is thereby establishing
 the ZeroMQ communication, receiving, creating and sending the messages.
 """
 
-import sys
-import zmq.asyncio
+import os
+import signal
 import logging
 import json
 import time
-import os
-import asyncio
 import random
-from enum import IntEnum
+import asyncio
+
+import zmq.asyncio
+
 
 class BaseModule():
     """Base module for all DPT modules.
@@ -48,6 +49,12 @@ class BaseModule():
     flush_server_socket:
         Drop old messages to server.
 
+    Important Attributes:
+    ---------------------
+    shutdown_signal: asycnio.Event
+        Put await self.shutdown_signal.wait() to wait until a shutdown signal
+        is received.
+
     """
 
     def __init__(self):   
@@ -55,6 +62,7 @@ class BaseModule():
         logging.basicConfig(format='%(asctime)s %(message)s',
                             level=logging.INFO)
 
+        # Module Parameters
         self.zmq_port = os.environ["ZMQ_PORT"]
         unique_id = hash(time.time() + random.randint(0, 1024))
         self.name = os.environ["MODULE_NAME"] + "_" + str(unique_id)
@@ -65,9 +73,13 @@ class BaseModule():
         self.server_socket = self.context.socket(zmq.ROUTER)
         self.server_socket.bind(f"tcp://*:{self.zmq_port}")
 
-        self.server_msg_queue = asyncio.Queue()
+        # Graceful shutdown Setup
+        self.shutdown_signal = asyncio.Event()
+        signal.signal(signal.SIGINT, self.shutdown_signal.set)
+        signal.signal(signal.SIGTERM, self.shutdown_signal.set)
 
         logging.info(f"Started Service")
+
 
     # CLIENT METHODS
     ##########################################################################

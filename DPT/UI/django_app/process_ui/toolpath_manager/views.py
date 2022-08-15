@@ -18,8 +18,7 @@ ui_module.register_connection(OP_DATA_ADDR)
 ui_module.register_connection(EVA_INTERFACE_ADDR)
 
 async def index(request, reset=False):
-    """
-    Main Landing Page for the EVA UI
+    """ Main Landing Page for the EVA UI
     """
 
     await ui_module.client_transmit(OP_DATA_ADDR, ("GET_ALL_WP_IDS",))
@@ -47,43 +46,39 @@ async def index(request, reset=False):
     return render(request, "toolpath_manager/index.html", context=context)
 
 
-def backdriving(request):
-    """
-    Enable EVA backdriving mode, where the head can be moved and waypoints can be saved to
-    the databse.
+async def backdriving(request):
+    """ Enable EVA backdriving mode, where the head can be moved and 
+    waypoints can be saved to the databse.
     """
 
-    ui_module.transmit(EVA_INTERFACE_ADDR, (Requests.BACKDRIVING_MODE,))
+    await ui_module.transmit(EVA_INTERFACE_ADDR, ("BACKDRIVING_MODE",))
     errors = []
-    confirmation = None
-    try:
-        (sender, confirmation) = ui_module.receive(timeout=10000)
+    response = None
 
+    try:
+        (response,) = await ui_module.receive(EVA_INTERFACE_ADDR, timeout=10000)
     except TimeoutException:
         errors.append("Timeout: No Response from EVA_INTERFACE")
 
     # What if an unexpected response is received
-    if confirmation is not None and confirmation != Requests.BACKDRIVING_MODE:
-        if confirmation == Responses.LOCK_FAILED:
-            errors.append("Eva Lock failed. See if EVA is connected and no other lock exists.")
-        else:
-            errors.append("Messaging Error: Wrong message received.")
+    if response == "LOCK_FAILED":
+        errors.append("Eva Lock failed. See if EVA is connected and no other lock exists.")
+    if response != "BACKDRIVING_MODE":
+        errors.append("Unknown Error")
 
-
-    context = {"confirmation": confirmation, "errors": errors}
+    context = {"errors": errors}
 
     return render(request, "toolpath_manager/backdriving.html", context=context)
 
 
-def waypoint_detail(request, hash_id, delete=False):
-    """
-    Detailed information regarding the selected waypoint.
+async def waypoint_detail(request, hash_id, delete=False):
+    """ Detailed information regarding the selected waypoint.
     """
 
     # INIT
     ##############################################################################################
 
-    ui_module.transmit(OP_DATA_ADDR, (Requests.GET_WP, hash_id))
+    await ui_module.transmit(OP_DATA_ADDR, ("GET_WP", hash_id))
     errors = []
     joint_angles = None
     name = None
@@ -96,17 +91,12 @@ def waypoint_detail(request, hash_id, delete=False):
     ###############################################################################################
 
     try:
-        (sender, msg) = ui_module.receive(timeout=100)
-
-        if msg[1] == Responses.NONEXISTENT_OBJECT:
-            ret_hash_id = msg[0]
-            errors.append("No Waypoint with given ID.")
+        msg = await ui_module.receive(OP_DATA_ADDR, timeout=100)
+        reponse = msg[0]
+        if response == "NONEXISTENT_OBJECT":
+            errors.append(f"No Waypoint with given ID {msg[1]}.")
         else:
-            (ret_hash_id, name, joint_angles, creation_time) = msg
-
-        # If wrong waypoint is returned
-        if ret_hash_id != hash_id:
-            errors.append("Wrong Waypoint received from Database")
+            (response, ret_hash_id, name, joint_angles, creation_time) = msg
 
     except TimeoutException:
         errors.append("Timeout: No Response from Database")
