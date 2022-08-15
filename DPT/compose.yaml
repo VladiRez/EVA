@@ -44,6 +44,7 @@ services:
       - MODULE_NAME=process_ui
       - WEBSERVER_IP=127.0.0.0/24
       - EVA_INTERFACE_ADDR=eva-interface
+      - EVA_INTERFACE_NUM_SERVERS=1
       - OP_DATA_ADDR=op-data-interface
   
   ui-webserver:

@@ -23,6 +23,7 @@ class EvaInterface(BaseModule):
     Necessary OS Environment Variables:
     -----------------------------------
     OP_DATA_ADDR: ip or domain dame of the operational data interface
+    OP_DATA_NUM_SERVERS: number of op data interface containers/services
 
     Service requests:
     -----------------
@@ -34,7 +35,8 @@ class EvaInterface(BaseModule):
         super().__init__()
 
         self.OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
-        self.register_connection(self.OP_DATA_ADDR) 
+        op_data_server_count = int(os.environ["OP_DATA_SERVER_COUNT"])
+        self.register_connection(self.OP_DATA_ADDR, op_data_server_count) 
 
         # Eva Setup
         host = '192.168.152.106'

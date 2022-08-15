@@ -8,6 +8,7 @@ the ZeroMQ communication, receiving, creating and sending the messages.
 import os
 import signal
 import logging
+import socket
 import json
 import time
 import random
@@ -111,7 +112,7 @@ class BaseModule():
     # CLIENT METHODS
     ##########################################################################
 
-    def register_connection(self, address: str):
+    def register_connection(self, address: str, server_count: int):
         """ Connects to a server (dpt module).
 
         Parameters:
@@ -119,11 +120,12 @@ class BaseModule():
         address: Either the ip address or the DNS domain name
         """
 
-
         new_socket = self.context.socket(zmq.DEALER)
         new_socket.setsockopt(zmq.LINGER, 0)
         new_socket.setsockopt_string(zmq.IDENTITY, self.name)
-        new_socket.connect(f"tcp://{address}:{self.zmq_port}")
+
+        for _ in range(server_count):
+            new_socket.connect(f"tcp://{address}:{self.zmq_port}")
         
         self.client_sockets[address] = new_socket 
                  

@@ -11,10 +11,12 @@ from base_module import BaseModule, TimeoutException
 
 OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
 EVA_INTERFACE_ADDR = os.environ["EVA_INTERFACE_ADDR"]
+op_data_server_count = int(os.environ["OP_DATA_SERVER_COUNT"])
+eva_interface_server_count = int(os.environ["EVA_INTERFACE_SERVER_COUNT"])
 
 ui_module = BaseModule()
-ui_module.register_connection(OP_DATA_ADDR)
-ui_module.register_connection(EVA_INTERFACE_ADDR)
+ui_module.register_connection(OP_DATA_ADDR, op_data_server_count)
+ui_module.register_connection(EVA_INTERFACE_ADDR, eva_interface_server_count)
 
 async def index(request, reset=False):
     """ Main Landing Page for the EVA UI
