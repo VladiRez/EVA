@@ -71,15 +71,23 @@ class BaseModule():
         self.context = zmq.asyncio.Context()
         self.client_sockets = {}
         self.server_socket = self.context.socket(zmq.ROUTER)
-        self.server_socket.bind(f"tcp://*:{self.zmq_port}")
+        self.server_socket.bind(f"tcp://*:{self.zmq_port}")        
 
-        # Graceful shutdown Setup
         self.shutdown_signal = asyncio.Event()
-        signal.signal(signal.SIGINT, self.shutdown_signal.set)
-        signal.signal(signal.SIGTERM, self.shutdown_signal.set)
 
         logging.info(f"Started Service")
 
+
+    async def setup_shutdown_signal(self):
+        """Call to setup shutdown signal"""
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(signal.SIGINT, self.set_shutdown_signal)
+        loop.add_signal_handler(signal.SIGTERM, self.set_shutdown_signal)
+        
+    def set_shutdown_signal(self):
+        """Called when SIGINT or SIGTERM signal received"""
+        logging.info(f"Shutdown Signal received.")
+        self.shutdown_signal.set()
 
     # CLIENT METHODS
     ##########################################################################

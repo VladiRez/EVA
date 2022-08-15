@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  base_module:
+  base-module:
     build:
       context: ./CONTROL/base_module
     image: 192.168.56.104:5000/base_module

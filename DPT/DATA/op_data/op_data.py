@@ -40,7 +40,7 @@ class OpData(BaseModule):
     async def entrypoint(self):
         """ Asynchronous entrypoint to be used with asyncio.run()
         """
-
+        await self.setup_shutdown_signal()
         task_service_loop = asyncio.create_task(self.service_loop())
         await self.shutdown_signal.wait()
         task_service_loop.cancel()
@@ -152,5 +152,3 @@ class OpData(BaseModule):
 
 if __name__ == "__main__":
     opd = OpData()
-    opd.listen()
-

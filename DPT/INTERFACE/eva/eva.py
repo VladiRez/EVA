@@ -42,6 +42,7 @@ class EvaInterface(BaseModule):
         asyncio.run(self.entrypoint())
 
     async def entrypoint(self):
+        await self.setup_shutdown_signal()
         service_loop_task = asyncio.create_task(self.service_loop())
         await self.shutdown_signal.wait()
         service_loop_task.cancel()
