@@ -30,10 +30,15 @@ class BaseModule():
     ZMQ_PORT: Port on which all zmq communication should happen
     MODULE_NAME: Name for registration of client socket on the server socket
 
+    Common Module Methods:
+    ----------------------
+    start:
+        Start module with passed functions.
+
     Client Methods:
     ---------------
     register_connection:
-        Create a socket and connect it to a server (dpt-module)
+        Create a socket and connect it to a server (dpt-module).
     client_transmit:
         Transmit a message to a specific server. Register connection first.
     client_receive:
@@ -48,12 +53,6 @@ class BaseModule():
         Receive a message on the server socket.
     flush_server_socket:
         Drop old messages to server.
-
-    Important Attributes:
-    ---------------------
-    shutdown_signal: asycnio.Event
-        Put await self.shutdown_signal.wait() to wait until a shutdown signal
-        is received.
 
     """
 
@@ -77,17 +76,37 @@ class BaseModule():
 
         logging.info(f"Started Service")
 
-
-    async def setup_shutdown_signal(self):
-        """Call to setup shutdown signal"""
-        loop = asyncio.get_event_loop()
-        loop.add_signal_handler(signal.SIGINT, self.set_shutdown_signal)
-        loop.add_signal_handler(signal.SIGTERM, self.set_shutdown_signal)
         
-    def set_shutdown_signal(self):
+    def __set_shutdown_signal(self):
         """Called when SIGINT or SIGTERM signal received"""
         logging.info(f"Shutdown Signal received.")
         self.shutdown_signal.set()
+
+    async def __entrypoint(self, *funcs):
+        """Run this method in a asyncio.run() loop in the module itself"""
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(signal.SIGINT, self.__set_shutdown_signal)
+        loop.add_signal_handler(signal.SIGTERM, self.__set_shutdown_signal)
+
+        tasks = asyncio.gather(*funcs)
+        await self.shutdown_signal.wait()
+        tasks.cancel()
+        try:
+            await tasks
+        except asyncio.CancelledError:
+            logging.info("Successfully shut down. Goodbye.")
+    
+    def start(self, *funcs):
+        """Start the module with the awaitable funcions given in *funcs.
+        Example: self.start(client_loop(), do_concurrently(), do_other_thing())
+
+        Parameters:
+        -----------
+        *funcs: function
+            Wildcard notation: Pass multiple async functions if needed.
+        """
+        awaitable = self.__entrypoint(*funcs)
+        asyncio.run(awaitable)
 
     # CLIENT METHODS
     ##########################################################################

@@ -39,18 +39,7 @@ class EvaInterface(BaseModule):
 
         self.backdriving_task = None
 
-        asyncio.run(self.entrypoint())
-
-    async def entrypoint(self):
-        await self.setup_shutdown_signal()
-        service_loop_task = asyncio.create_task(self.service_loop())
-        await self.shutdown_signal.wait()
-        service_loop_task.cancel()
-        try:
-            await service_loop_task
-        except asyncio.CancelledError:
-            logging.info("Successfully shut down. Goodbye.")
-
+        self.start(self.service_loop())
 
     async def service_loop(self) -> None:
         """ Loop for listening to incoming requests.

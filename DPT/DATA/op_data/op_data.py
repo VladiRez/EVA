@@ -34,20 +34,7 @@ class OpData(BaseModule):
         self.client = MongoClient(db_address)
         self.db = self.client["dpt_op_data"]
 
-        asyncio.run(self.entrypoint())
-        
-
-    async def entrypoint(self):
-        """ Asynchronous entrypoint to be used with asyncio.run()
-        """
-        await self.setup_shutdown_signal()
-        task_service_loop = asyncio.create_task(self.service_loop())
-        await self.shutdown_signal.wait()
-        task_service_loop.cancel()
-        try:
-            await task_service_loop
-        except asyncio.CancelledError:
-            logging.info("Successfully shut down. Goodbye.")
+        self.start(self.service_loop())
 
     async def service_loop(self) -> None:
         """
