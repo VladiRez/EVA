@@ -20,6 +20,10 @@ class OpData(BaseModule):
     """
     Class for interfacing with the Operational Data Storage
 
+    Necessary OS Environment Variables:
+    -----------------------------------
+    DB_ADDRESS: ip or domain dame of the mongodb database
+
     Service requests:
     -----------------
     SHUTDOWN, NEW_WP, GET_WP, GET_ALL_WP_IDS, CHANGE_WP_NAME, NEW_TP, GET_TP, ADD_TO_TP,
@@ -62,6 +66,7 @@ class OpData(BaseModule):
                     wp_doc = col_waypoints.find_one(wp_id)
                     if wp_doc is None:
                         await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(wp_id)))
+                        continue
 
                     wp_coor = wp_doc["coordinates"]
                     wp_name = wp_doc["wp_name"]
@@ -101,6 +106,7 @@ class OpData(BaseModule):
                     tp_doc = toolpaths.find_one(tp_id)
                     if tp_doc is None:
                         await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(tp_id)))
+                        continue
 
                     wp_list = tp_doc["wps"]
                     await self.server_transmit(sender, ("GET_TP", str(tp_id), wp_list))
@@ -111,6 +117,8 @@ class OpData(BaseModule):
                     tp_doc = toolpaths.find_one(tp_id)
                     if tp_doc is None:
                         await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(tp_id)))
+                        continue
+
                     wp_list = tp_doc["wps"]
                     wp_list.append(wp_id)
                     new_list = {"$set": {"wps": wp_list}}
@@ -125,6 +133,8 @@ class OpData(BaseModule):
                     tp_doc = toolpaths.find_one(tp_id)
                     if tp_doc is None:
                         await self.server_transmit(sender, ("NONEXISTENT_OBJECT",))
+                        continue
+
                     wp_list = tp_doc["wps"]
                     wp_list.pop(index)
                     new_list = {"$set": {"wps": wp_list}}

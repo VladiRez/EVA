@@ -1,5 +1,4 @@
 from django.shortcuts import render
-from django.http import HttpResponse, Http404
 from django.contrib import messages
 from django import forms
 
@@ -51,12 +50,12 @@ async def backdriving(request):
     waypoints can be saved to the databse.
     """
 
-    await ui_module.transmit(EVA_INTERFACE_ADDR, ("BACKDRIVING_MODE",))
+    await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("BACKDRIVING_MODE",))
     errors = []
     response = None
 
     try:
-        (response,) = await ui_module.receive(EVA_INTERFACE_ADDR, timeout=10000)
+        (response,) = await ui_module.client_receive(EVA_INTERFACE_ADDR, timeout=10000)
     except TimeoutException:
         errors.append("Timeout: No Response from EVA_INTERFACE")
 
@@ -71,14 +70,14 @@ async def backdriving(request):
     return render(request, "toolpath_manager/backdriving.html", context=context)
 
 
-async def waypoint_detail(request, hash_id, delete=False):
+async def waypoint_detail(request, wp_id, delete=False):
     """ Detailed information regarding the selected waypoint.
     """
 
     # INIT
     ##############################################################################################
 
-    await ui_module.transmit(OP_DATA_ADDR, ("GET_WP", hash_id))
+    await ui_module.client_transmit(OP_DATA_ADDR, ("GET_WP", wp_id))
     errors = []
     joint_angles = None
     name = None
@@ -91,12 +90,12 @@ async def waypoint_detail(request, hash_id, delete=False):
     ###############################################################################################
 
     try:
-        msg = await ui_module.receive(OP_DATA_ADDR, timeout=100)
-        reponse = msg[0]
+        msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+        response = msg[0]
         if response == "NONEXISTENT_OBJECT":
             errors.append(f"No Waypoint with given ID {msg[1]}.")
         else:
-            (response, ret_hash_id, name, joint_angles, creation_time) = msg
+            (response, wp_id, name, joint_angles, creation_time) = msg
 
     except TimeoutException:
         errors.append("Timeout: No Response from Database")
@@ -108,15 +107,15 @@ async def waypoint_detail(request, hash_id, delete=False):
     if request.method == "POST":
         if "delete" in request.POST:
             try:
-                ui_module.transmit(OP_DATA_ADDR, (Requests.DEL_WP, hash_id))
-                (sender, msg) = ui_module.receive(from_sender="op_data",
-                        expected_msg=(Requests.DEL_WP, Responses.NONEXISTENT_OBJECT), timeout=100)
+                await ui_module.client_transmit(OP_DATA_ADDR, ("DEL_WP", wp_id))
+                msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
 
-                if msg == Requests.DEL_WP:
+                response = msg[0]
+                if response == "DEL_WP":
                     messages.info(request, "Waypoint successfully deleted.")
                     deleted = True
                 else:
-                    errors.append(request, "Could not delete waypoint.")
+                    errors.append(request, f"Could not delete waypoint: {response}")
 
             except TimeoutException:
                 errors.append("Timeout: No Response from Database")
@@ -129,29 +128,27 @@ async def waypoint_detail(request, hash_id, delete=False):
             else:
                 new_name = name_form.cleaned_data["new_name"]
                 name = new_name
-                ui_module.transmit(OP_DATA_ADDR, (Requests.CHANGE_WP_NAME, hash_id, new_name))
+                await ui_module.client_transmit(OP_DATA_ADDR, ("CHANGE_WP_NAME", wp_id, new_name))
                 try:
-                    (sender, msg) = ui_module.receive(expected_msg=(Requests.CHANGE_WP_NAME,),
-                                                      timeout=100)
+                    msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
 
-                    if msg == Responses.UNEXPECTED_FAILURE:
-                        errors.append("Unexpected Failure in Database")
-
-                    else:
+                    response = msg[0]
+                    if msg == "CHANGE_WP_NAME":
                         messages.info(request, "Name changed successfully!")
+                    else:
+                        errors.append(f"Could not rename waypoint: {response}")
 
                 except TimeoutException:
                     errors.append("Timeout: No Response from Database")
 
         elif "goto" in request.POST:
             if joint_angles is not None:
-                ui_module.transmit(EVA_INTERFACE_ADDR, (Requests.GOTO_WP, joint_angles))
+                await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("GOTO_WP", joint_angles))
                 try:
-                    (sender, msg) = ui_module.receive(
-                                      expected_msg=(Requests.GOTO_WP, Responses.LOCK_FAILED),
-                                      timeout=10000)
+                    msg = await ui_module.client_receive(EVA_INTERFACE_ADDR, timeout=10000)
 
-                    if msg == Requests.GOTO_WP:
+                    response = msg[0]
+                    if response == "GOTO_WP":
                         messages.info(request, "Successfully moved to waypoint.")
                     else:
                         errors.append("Error: Could not get EVA Lock")
@@ -176,31 +173,37 @@ async def waypoint_detail(request, hash_id, delete=False):
     else:
         timestr = None
 
-    context = {"deleted": deleted, "hash_id": hash_id, "name": name, "joint_angles": joint_angles,
+    context = {"deleted": deleted, "wp_id": wp_id, "name": name, "joint_angles": joint_angles,
                "timestr": timestr, "name_form": name_form, "errors": errors}
 
     return render(request, "toolpath_manager/waypoint_detail.html", context)
 
 
-def create_toolpath(request):
+async def create_toolpath(request):
     errors = []
 
     # Get all waypoint ids and names from DB for the selection box
-    ui_module.transmit("op_data", (Requests.GET_ALL_WP_IDS,))
+    await ui_module.client_transmit(OP_DATA_ADDR, ("GET_ALL_WP_IDS",))
     wp_tuple = None
     wp_dict = None
     try:
-        (sender, (ids, names)) = ui_module.receive(from_sender="op_data", timeout=100)
+        msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=1000)
+        (response, ids, names) = msg
         wp_tuple = tuple(zip(ids, names))
         wp_dict = {wp_id: name for (wp_id, name) in wp_tuple}
     except TimeoutException:
         errors.append("Timeout: No response from Database")
 
     # Get list of waypoints in the toolpath
-    ui_module.transmit("op_data", (Requests.GET_TP, "62f501fd498cc3cb66b88f89"))
-    wp_id_list = None
+    await ui_module.client_transmit(OP_DATA_ADDR, ("GET_TP", "62f501fd498cc3cb66b88f89"))
+    tp_timeline = None
     try:
-        (sender, (tp_id, wp_id_list)) = ui_module.receive(from_sender="op_data", timeout=100)
+        msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=1000)
+        response = msg[0]
+        if response == "GET_TP":
+            (response, tp_id, tp_timeline) = msg
+        else:
+            errors.append(f"Error when getting Toolpath from DB: {response}")
     except TimeoutException:
         errors.append("Timeout: No response from Database")
 
@@ -210,16 +213,16 @@ def create_toolpath(request):
     if request.method == "POST":
         if "execute" in request.POST:
             wp_list_markup = []
-            for i, wp_id in enumerate(wp_id_list):
-                ui_module.transmit("op_data", (Requests.GET_WP, wp_id))
+            for i, wp_id in enumerate(tp_timeline):
+                await ui_module.client_transmit(OP_DATA_ADDR, ("GET_WP", wp_id))
                 try:
-                    (sender, msg) = ui_module.receive(from_sender="op_data", timeout=100)
-                    (hash_id, name, joint_angles, creation_time) = msg
+                    msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+                    (response, wp_id, name, joint_angles, creation_time) = msg
                 except TimeoutException:
                     errors.append("Timeout: No response from Database")
                 wp_list_markup.append({"label_id": i, "joints": joint_angles})
             try:
-                ui_module.transmit("eva_interface", (Requests.EXECUTE_TP, wp_list_markup))
+                await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("EXECUTE_TP", wp_list_markup))
             except TimeoutException:
                 errors.append("Timeout: No response from EVA INTERFACE")
         elif "add_to_tp" in request.POST:
@@ -229,26 +232,28 @@ def create_toolpath(request):
             #else:
             #wp_to_add = select_wp_form.data["select_wp"]
             wp_to_add = request.POST.get("select_wp")
-            ui_module.transmit("op_data", (Requests.ADD_TO_TP, "62f501fd498cc3cb66b88f89",
+            await ui_module.client_transmit(OP_DATA_ADDR, ("ADD_TO_TP", "62f501fd498cc3cb66b88f89",
                                            wp_to_add))
             try:
-                (sender, msg) = ui_module.receive(from_sender="op_data", timeout=100)
-                if msg == Requests.ADD_TO_TP:
-                    wp_id_list.append(wp_to_add)
+                msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+                response = msg[0]
+                if response == "ADD_TO_TP":
+                    tp_timeline.append(wp_to_add)
                     messages.info(request, "Waypoint successfully added.")
                 else:
                     errors.append("Error adding WP to Toolpath")
             except TimeoutException:
                 errors.append("Timeout: No response from Database")
+
         elif "delete" in request.POST:
             try:
                 wp_index = int(request.POST.get("wp_index"))
-                ui_module.transmit("op_data", (Requests.RM_FROM_TP, "62f501fd498cc3cb66b88f89", wp_index))
-                (sender, msg) = ui_module.receive(from_sender="op_data",
-                        expected_msg=(Requests.RM_FROM_TP, Responses.NONEXISTENT_OBJECT), timeout=100)
-
-                if msg == Requests.RM_FROM_TP:
-                    wp_id_list.pop(wp_index)
+                await ui_module.client_transmit(OP_DATA_ADDR, ("RM_FROM_TP", "62f501fd498cc3cb66b88f89", 
+                                          wp_index))
+                msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+                response = msg[0]
+                if response == "RM_FROM_TP":
+                    tp_timeline.pop(wp_index)
                     messages.info(request, "Waypoint successfully deleted.")
                 else:
                     errors.append("Could not delete waypoint.")
@@ -256,10 +261,17 @@ def create_toolpath(request):
             except TimeoutException:
                 errors.append("Timeout: No Response from Database")
 
-    wp_list = ((wp_id, wp_dict[wp_id], i) for (i, wp_id) in enumerate(wp_id_list))
-    select_wp_form = SelectWaypointForm(tuple(wp_tuple))
+    
+    if tp_timeline is None:
+        tp_timeline_detailed = ()
+    else:
+        tp_timeline_detailed = ((wp_id, wp_dict[wp_id], i) for (i, wp_id) in enumerate(tp_timeline))
+    if wp_tuple is None:
+        select_wp_form = SelectWaypointForm(choices=())
+    else:
+        select_wp_form = SelectWaypointForm(wp_tuple)
 
-    context = {"select_wp_form": select_wp_form, "wp_list": wp_list, "errors": errors}
+    context = {"select_wp_form": select_wp_form, "wp_list": tp_timeline_detailed, "errors": errors}
 
     return render(request, "toolpath_manager/toolpath_editor.html", context=context)
 

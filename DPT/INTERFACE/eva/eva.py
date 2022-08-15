@@ -20,6 +20,10 @@ from base_module import BaseModule
 class EvaInterface(BaseModule):
     """ Class for Interfacing with the EVA Automata Robot
 
+    Necessary OS Environment Variables:
+    -----------------------------------
+    OP_DATA_ADDR: ip or domain dame of the operational data interface
+
     Service requests:
     -----------------
     BACKDRIVING_MODE, STOP_BACKDRIVING, GOTO_WP, EXECUTE_TP
@@ -131,8 +135,6 @@ class EvaInterface(BaseModule):
 
         :param sender: the string of the address to return a response to.
         """
-        # Clear the backdriving events
-        self.backdriving_abort.clear()
 
         success = False
         with self.eva.lock() as eva, self.eva.websocket() as ws:
@@ -160,6 +162,7 @@ class EvaInterface(BaseModule):
             await self.server_transmit(sender, ("LOCK_FAILED",))
 
     async def new_waypoint(self, waypoint: dict[str, object]):
+        # TODO Not working because of address
         await self.server_transmit(self.OP_DATA_ADDR, ("NEW_WP", waypoint["waypoint"]))
         pass
 
