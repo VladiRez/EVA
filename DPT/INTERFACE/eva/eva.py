@@ -16,12 +16,12 @@ import asyncio
 import os
 from threading import Thread, Lock, Event
 
-from dpt_module import DptModule, Requests, Responses
+from base_module import BaseModule
 
 logging.basicConfig(level=logging.DEBUG)
 
 
-class EvaInterface(DptModule):
+class EvaInterface(BaseModule):
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -42,9 +42,8 @@ class EvaInterface(DptModule):
         asyncio.run(self.entrypoint())
 
     async def entrypoint(self):
-        server_loop_task = asyncio.create_task(self.server_loop())
         service_loop_task = asyncio.create_task(self.service_loop())
-        await asyncio.gather(server_loop_task, service_loop_task)
+        await service_loop_task
 
     async def service_loop(self) -> None:
         """
@@ -65,27 +64,29 @@ class EvaInterface(DptModule):
                 else:
                     raise e
 
-            if msg[0] == Requests.SHUTDOWN:
+            request = msg[0]
+
+            if request == "SHUTDOWN":
                 self.shutdown()
                 break
 
-            elif msg[0] == Requests.BACKDRIVING_MODE:
+            elif request == "BACKDRIVING_MODE":
                 self.backdriving_task = create_task(self.backdriving(sender))
 
-            elif msg[0] == Requests.STOP_BACKDRIVING:
+            elif request == "STOP_BACKDRIVING":
                 self.backdriving_abort.set()
                 await self.backdriving_task
-                await self.server_transmit(sender, Requests.STOP_BACKDRIVING)
+                await self.server_transmit(sender, ("STOP_BACKDRIVING",))
 
-            elif msg[0] == Requests.GOTO_WP:
+            elif request == "GOTO_WP":
                 joint_angles = msg[1]
                 lock_success = self.goto_wp(joint_angles)
                 if lock_success:
-                    await self.server_transmit(sender, Requests.GOTO_WP)
+                    await self.server_transmit(sender, ("GOTO_WP",))
                 else:
-                    await self.server_transmit(sender, Responses.LOCK_FAILED)
+                    await self.server_transmit(sender, ("LOCK_FAILED",))
 
-            elif msg[0] == Requests.EXECUTE_TP:
+            elif request == "EXECUTE_TP":
                 wp_list = msg[1]
 
                 timeline = [{
@@ -121,7 +122,7 @@ class EvaInterface(DptModule):
                     self.eva.control_run(loop=1, mode='teach')
 
             else:
-                await self.server_transmit(sender, Responses.UNKNOWN_COMMAND)
+                await self.server_transmit(sender, ("UNKNOWN_COMMAND",))
 
     def goto_wp(self, joint_angles: list[float]) -> bool:
         """
@@ -159,15 +160,15 @@ class EvaInterface(DptModule):
             # Context to change the lock renew period
             with EvaWithLocker(eva, fallback_renew_period=2):
                 success = True
-                await self.server_transmit(sender, Requests.BACKDRIVING_MODE)
+                await self.server_transmit(sender, ("BACKDRIVING_MODE",))
                 await self.backdriving_abort.wait()
-                await self.server_transmit(sender, Requests.STOP_BACKDRIVING)
+                await self.server_transmit(sender, ("STOP_BACKDRIVING",))
 
         if not success:
-            await self.server_transmit(sender, Responses.LOCK_FAILED)
+            await self.server_transmit(sender, ("LOCK_FAILED",))
 
     async def new_waypoint(self, waypoint: dict[str, object]):
-        await self.server_transmit(self.OP_DATA_ADDR, (Requests.NEW_WP, waypoint["waypoint"]))
+        await self.server_transmit(self.OP_DATA_ADDR, ("NEW_WP", waypoint["waypoint"]))
         pass
 
     def goto_zero(self):
