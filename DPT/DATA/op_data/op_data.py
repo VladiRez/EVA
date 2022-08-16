@@ -7,11 +7,11 @@ PyMongo docs: https://pymongo.readthedocs.io/en/stable/
 
 from pymongo import MongoClient
 from bson.objectid import ObjectId
+from bson.json_util import dumps
 import time
 import logging
-import signal
-import asyncio
 import os
+import json
 
 
 from base_module import BaseModule
@@ -26,8 +26,8 @@ class OpData(BaseModule):
 
     Service requests:
     -----------------
-    SHUTDOWN, NEW_WP, GET_WP, GET_ALL_WP_IDS, CHANGE_WP_NAME, NEW_TP, GET_TP, ADD_TO_TP,
-    RM_FROM_TP 
+    SHUTDOWN, NEW_WP, GET_WP, GET_ALL_WP_IDS, CHANGE_WP_NAME,
+    NEW_TP, GET_TP, ADD_TO_TP, RM_FROM_TP 
     """
 
     def __init__(self):
@@ -46,10 +46,11 @@ class OpData(BaseModule):
         Expects a tuple with the first entry being the request type.
         """
 
-        while True:
+        col_waypoints = self.db["waypoints"]
+        col_toolpaths = self.db["toolpaths"]
 
-            col_waypoints = self.db["waypoints"]
-            toolpaths = self.db["toolpaths"]
+        while True:
+            
             (sender, msg) = await self.server_receive()
 
             match msg:
@@ -97,13 +98,13 @@ class OpData(BaseModule):
                         await self.server_transmit(sender, ("CHANGE_WP_NAME",))
                     else:
                         await self.server_transmit(sender, ("UNEXPECTED_FAILURE",))
-                
+
                 case ["NEW_TP"]:
                     pass
 
                 case ["GET_TP", tp_id]:
                     tp_id = ObjectId(tp_id)
-                    tp_doc = toolpaths.find_one(tp_id)
+                    tp_doc = col_toolpaths.find_one(tp_id)
                     if tp_doc is None:
                         await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(tp_id)))
                         continue
@@ -114,7 +115,7 @@ class OpData(BaseModule):
                 case ["ADD_TO_TP", tp_id, wp_id]:
 
                     tp_id = ObjectId(tp_id)
-                    tp_doc = toolpaths.find_one(tp_id)
+                    tp_doc = col_toolpaths.find_one(tp_id)
                     if tp_doc is None:
                         await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(tp_id)))
                         continue
@@ -122,7 +123,7 @@ class OpData(BaseModule):
                     wp_list = tp_doc["wps"]
                     wp_list.append(wp_id)
                     new_list = {"$set": {"wps": wp_list}}
-                    result = toolpaths.update_one({"_id": tp_id}, new_list)
+                    result = col_toolpaths.update_one({"_id": tp_id}, new_list)
                     if result.acknowledged and result.modified_count == 1:
                         await self.server_transmit(sender, ("ADD_TO_TP",))
                     else:
@@ -130,7 +131,7 @@ class OpData(BaseModule):
 
                 case ["RM_FROM_TP", tp_id, index]:
                     tp_id = ObjectId(tp_id)
-                    tp_doc = toolpaths.find_one(tp_id)
+                    tp_doc = col_toolpaths.find_one(tp_id)
                     if tp_doc is None:
                         await self.server_transmit(sender, ("NONEXISTENT_OBJECT",))
                         continue
@@ -138,12 +139,12 @@ class OpData(BaseModule):
                     wp_list = tp_doc["wps"]
                     wp_list.pop(index)
                     new_list = {"$set": {"wps": wp_list}}
-                    result = toolpaths.update_one({"_id": tp_id}, new_list)
+                    result = col_toolpaths.update_one({"_id": tp_id}, new_list)
                     if result.acknowledged and result.modified_count == 1:
                         await self.server_transmit(sender, ("RM_FROM_TP",))
                     else:
                      await self.server_transmit(sender, ("UNEXPECTED_FAILURE",))
-
+                                    
                 case _:
                     await self.server_transmit(sender, ("UNKNOWN_REQUEST",))
 

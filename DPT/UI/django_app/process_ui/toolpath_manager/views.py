@@ -1,6 +1,8 @@
 from django.shortcuts import render
 from django.contrib import messages
+from django.http import HttpResponse
 from django import forms
+
 
 import time
 import os
@@ -18,7 +20,7 @@ ui_module = BaseModule()
 ui_module.register_connection(OP_DATA_ADDR, op_data_server_count)
 ui_module.register_connection(EVA_INTERFACE_ADDR, eva_interface_server_count)
 
-async def index(request, reset=False):
+async def index(request):
     """ Main Landing Page for the EVA UI
     """
 
@@ -32,16 +34,16 @@ async def index(request, reset=False):
     except TimeoutException:
         errors.append("Timeout: No response from Database")
 
-    if reset:
-        await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("STOP_BACKDRIVING",))
+    if request.method == "POST":
+        if "reset_backdriving" in request.POST:
+            await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("STOP_BACKDRIVING",))
 
-        try:
-            (response,) = await ui_module.client_receive(EVA_INTERFACE_ADDR, timeout=10000)
-            if response == "STOP_BACKDRIVING":
-                messages.info(request, "Successfully unlocked EVA.")
-        except TimeoutException:
-            errors.append("Failed to unlock EVA.")
-
+            try:
+                (response,) = await ui_module.client_receive(EVA_INTERFACE_ADDR, timeout=10000)
+                if response == "STOP_BACKDRIVING":
+                    messages.info(request, "Successfully unlocked EVA.")
+            except TimeoutException:
+                errors.append("Failed to unlock EVA.")
 
     context = {"wps": wp_tuple, "errors": errors}
     return render(request, "toolpath_manager/index.html", context=context)
@@ -132,10 +134,10 @@ async def waypoint_detail(request, wp_id, delete=False):
                 name = new_name
                 await ui_module.client_transmit(OP_DATA_ADDR, ("CHANGE_WP_NAME", wp_id, new_name))
                 try:
-                    msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+                    msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=500)
 
                     response = msg[0]
-                    if msg == "CHANGE_WP_NAME":
+                    if response == "CHANGE_WP_NAME":
                         messages.info(request, "Name changed successfully!")
                     else:
                         errors.append(f"Could not rename waypoint: {response}")
@@ -286,3 +288,6 @@ class SelectWaypointForm(forms.Form):
     def __init__(self, choices):
         super().__init__()
         self.fields["select_wp"] = forms.ChoiceField(choices=choices)
+
+class UploadFileForm(forms.Form):
+    file = forms.FileField()

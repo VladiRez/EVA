@@ -16,8 +16,21 @@ services:
     image: mongo
     networks:
       - dpt
+    volumes:
+      - op-data:/data/db
     logging:
       driver: none
+
+  op-data-admin:
+    image: mongo-express
+    networks:
+      - dpt
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=op-data-db
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=desktop
+    ports:
+      - 8081:8081
   
   op-data-interface:
     container_name: op-data-interface
@@ -74,3 +87,6 @@ services:
 networks:
   dpt:
   webserver:
+
+volumes:
+  op-data:
