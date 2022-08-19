@@ -7,7 +7,7 @@
   <body>
     <h1> Waypoint details for waypoint: </h1>
     <h2> {{ name }} </h2>
-    <h3> {{ hash_id }} </h3>
+    <h3> {{ wp_id }} </h3>
 
     {% if errors %}
       {% for error in errors %}
@@ -29,18 +29,18 @@
       {% endif %}
       {% if not deleted %}
 
-        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
+        <form action="{% url 'waypoint_detail' wp_id %}" method="POST">
           {% csrf_token %}
           {{ name_form }}
           <input type="submit" name="change_name" value="Change Waypoint Name"/>
         </form>
         <br>
-        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
+        <form action="{% url 'waypoint_detail' wp_id %}" method="POST">
           {% csrf_token %}
           <input type="submit" name="goto", value="Go To Waypoint">
         </form>
         <br>
-        <form action="{% url 'waypoint_detail' hash_id %}" method="POST">
+        <form action="{% url 'waypoint_detail' wp_id %}" method="POST">
           {% csrf_token %}
           <input type="submit" name="delete" value="Delete Waypoint"/>
         </form>

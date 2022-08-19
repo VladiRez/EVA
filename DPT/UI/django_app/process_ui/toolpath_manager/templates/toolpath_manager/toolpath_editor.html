@@ -27,17 +27,19 @@
             </li>
         {% endfor %}
     </ol>
-    <form action="{% url 'create_toolpath' %}" method="POST">
-        {% csrf_token %}
-        {{ select_wp_form }}
-        <input type="submit" name="add_to_tp" value="Add to toolpath"/>
-    </form>
-    <br>
-    <form action="{% url 'create_toolpath' %}" method="POST">
-        {% csrf_token %}
-        <input type="submit" name="execute" value="Execute Toolpath"/>
-    </form>
-    <br>
+    {% if not error %}
+        <form action="{% url 'create_toolpath' %}" method="POST">
+            {% csrf_token %}
+            {{ select_wp_form }}
+            <input type="submit" name="add_to_tp" value="Add to toolpath"/>
+        </form>
+        <br>
+        <form action="{% url 'create_toolpath' %}" method="POST">
+            {% csrf_token %}
+            <input type="submit" name="execute" value="Execute Toolpath"/>
+        </form>
+        <br>
+    {% endif %}
     <form action="{% url 'index' %}" method="GET">
       {% csrf_token %}
       <button type="submit">
