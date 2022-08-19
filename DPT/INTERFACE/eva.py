@@ -106,7 +106,7 @@ class EvaInterface(DptModule):
                 toolpath = {
                     "metadata": {
                         "version": 2,
-                        "default_max_speed": 0.25,
+                        "default_max_speed": 0.125,
                         "payload": 0,
                         "analog_modes": {
                             "i0": "voltage",
