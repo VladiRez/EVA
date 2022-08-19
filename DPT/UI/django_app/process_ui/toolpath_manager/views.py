@@ -34,16 +34,14 @@ async def index(request):
     except TimeoutException:
         errors.append("Timeout: No response from Database")
 
-    if request.method == "POST":
-        if "reset_backdriving" in request.POST:
-            await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("STOP_BACKDRIVING",))
+    await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("STOP_BACKDRIVING",))
 
-            try:
-                (response,) = await ui_module.client_receive(EVA_INTERFACE_ADDR, timeout=10000)
-                if response == "STOP_BACKDRIVING":
-                    messages.info(request, "Successfully unlocked EVA.")
-            except TimeoutException:
-                errors.append("Failed to unlock EVA.")
+    try:
+        (response,) = await ui_module.client_receive(EVA_INTERFACE_ADDR, timeout=10000)
+        if response == "STOP_BACKDRIVING":
+             messages.info(request, "Successfully unlocked EVA.")
+    except TimeoutException:
+        errors.append("Failed to unlock EVA.")
 
     context = {"wps": wp_tuple, "errors": errors}
     return render(request, "toolpath_manager/index.html", context=context)
@@ -187,11 +185,11 @@ async def create_toolpath(request):
     errors = []
 
     # Get all waypoint ids and names from DB for the selection box
-    await ui_module.client_transmit(OP_DATA_ADDR, ("GET_ALL_WP_IDS",))
+    req_id = await ui_module.client_transmit(OP_DATA_ADDR, ("GET_ALL_WP_IDS",))
     wp_tuple = None
     wp_dict = None
     try:
-        msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=1000)
+        msg = await ui_module.client_receive(OP_DATA_ADDR, req_id, timeout=1000)
         (response, ids, names) = msg
         wp_tuple = tuple(zip(ids, names))
         wp_dict = {wp_id: name for (wp_id, name) in wp_tuple}
@@ -199,10 +197,10 @@ async def create_toolpath(request):
         errors.append("Timeout: No response from Database")
 
     # Get list of waypoints in the toolpath
-    await ui_module.client_transmit(OP_DATA_ADDR, ("GET_TP", "62f501fd498cc3cb66b88f89"))
+    req_id = await ui_module.client_transmit(OP_DATA_ADDR, ("GET_TP", "62f501fd498cc3cb66b88f89"))
     tp_timeline = None
     try:
-        msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=1000)
+        msg = await ui_module.client_receive(OP_DATA_ADDR, req_id, timeout=1000)
         response = msg[0]
         if response == "GET_TP":
             (response, tp_id, tp_timeline) = msg
@@ -216,36 +214,83 @@ async def create_toolpath(request):
 
     if request.method == "POST":
         if "execute" in request.POST:
-            wp_list_markup = []
-            for i, wp_id in enumerate(tp_timeline):
+            # The timeline is a list with actions, i.e. waypoints, grips
+            # Filter only the waypoints and remove duplicates:
+            wp_ids = filter(lambda action: action not in ("GRIP", "UNGRIP"), tp_timeline)
+            unique_wp_ids = tuple(set(wp_ids))
+
+            # Each wp represented as just its joint angles.
+            # The index of each wp is the waypoint_number.
+            unique_wps = []
+            wp_number_dict = {}  # Dictionary mapping a waypoint id to its waypoint_number
+            # Get joint angles for unique wps
+            for (wp_number, wp_id) in enumerate(unique_wp_ids):
                 await ui_module.client_transmit(OP_DATA_ADDR, ("GET_WP", wp_id))
                 try:
                     msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                     (response, wp_id, name, joint_angles, creation_time) = msg
                 except TimeoutException:
                     errors.append("Timeout: No response from Database")
-                wp_list_markup.append({"label_id": i, "joints": joint_angles})
+                unique_wps.append(joint_angles)
+                wp_number_dict[wp_id] = wp_number
+
+            timeline = []
+            for action in tp_timeline:
+                if action in ("GRIP", "UNGRIP"):
+                    timeline.append(action)
+                else:
+                    wp_id = action
+                    timeline.append(wp_number_dict[wp_id])
             try:
-                await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("EXECUTE_TP", wp_list_markup))
+                await ui_module.client_transmit(EVA_INTERFACE_ADDR,
+                                                ("EXECUTE_TP", unique_wps, timeline))
             except TimeoutException:
                 errors.append("Timeout: No response from EVA INTERFACE")
-        elif "add_to_tp" in request.POST:
-            #select_wp_form = SelectWaypointForm(request.POST)
-            #if not select_wp_form.is_valid():
+        elif "add_wp_to_tp" in request.POST:
+            #select_element_form = SelectElementForm(request.POST)
+            #if not select_element_form.is_valid():
             #    errors.append("Invalid Selection.")
             #else:
-            #wp_to_add = select_wp_form.data["select_wp"]
-            wp_to_add = request.POST.get("select_wp")
-            await ui_module.client_transmit(OP_DATA_ADDR, ("ADD_TO_TP", "62f501fd498cc3cb66b88f89",
+            #wp_to_add = select_element_form.data["select_element"]
+            wp_to_add = request.POST.get("select_element")
+            await ui_module.client_transmit(OP_DATA_ADDR, ("ADD_WP_TO_TP", "62f501fd498cc3cb66b88f89",
                                            wp_to_add))
             try:
                 msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                 response = msg[0]
-                if response == "ADD_TO_TP":
+                if response == "ADD_WP_TO_TP":
                     tp_timeline.append(wp_to_add)
                     messages.info(request, "Waypoint successfully added.")
                 else:
                     errors.append("Error adding WP to Toolpath")
+            except TimeoutException:
+                errors.append("Timeout: No response from Database")
+
+        elif "add_grip_to_tp" in request.POST:
+            await ui_module.client_transmit(OP_DATA_ADDR,
+                                            ("ADD_GRIP_TO_TP", "62f501fd498cc3cb66b88f89",))
+            try:
+                msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+                response = msg[0]
+                if response == "ADD_GRIP_TO_TP":
+                    tp_timeline.append("GRIP")
+                    messages.info(request, "Grip successfully added.")
+                else:
+                    errors.append("Error adding Grip to Toolpath")
+            except TimeoutException:
+                errors.append("Timeout: No response from Database")
+
+        elif "add_ungrip_to_tp" in request.POST:
+            await ui_module.client_transmit(OP_DATA_ADDR,
+                                            ("ADD_UNGRIP_TO_TP", "62f501fd498cc3cb66b88f89",))
+            try:
+                msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+                response = msg[0]
+                if response == "ADD_UNGRIP_TO_TP":
+                    tp_timeline.append("UNGRIP")
+                    messages.info(request, "Ungrip successfully added.")
+                else:
+                    errors.append("Error adding Ungrip to Toolpath")
             except TimeoutException:
                 errors.append("Timeout: No response from Database")
 
@@ -265,17 +310,21 @@ async def create_toolpath(request):
             except TimeoutException:
                 errors.append("Timeout: No Response from Database")
 
-    
-    if tp_timeline is None:
-        tp_timeline_detailed = ()
-    else:
-        tp_timeline_detailed = ((wp_id, wp_dict[wp_id], i) for (i, wp_id) in enumerate(tp_timeline))
+    displayed_timeline = []
+    if tp_timeline is not None:
+        for ind, action in enumerate(tp_timeline):
+            if action in ("GRIP", "UNGRIP"):
+                displayed_timeline.append((ind, action))
+            else:
+                wp_id = action
+                displayed_timeline.append((ind, wp_id, wp_dict[wp_id]))
     if wp_tuple is None:
-        select_wp_form = SelectWaypointForm(choices=())
+        select_element_form = SelectElementForm(choices=())
     else:
-        select_wp_form = SelectWaypointForm(wp_tuple)
+        select_element_form = SelectElementForm(wp_tuple)
 
-    context = {"select_wp_form": select_wp_form, "wp_list": tp_timeline_detailed, "errors": errors}
+    logging.info(displayed_timeline)
+    context = {"select_element_form": select_element_form, "timeline": displayed_timeline, "errors": errors}
 
     return render(request, "toolpath_manager/toolpath_editor.html", context=context)
 
@@ -284,10 +333,12 @@ class ChangeNameForm(forms.Form):
     new_name = forms.CharField(label="Name ändern: ", max_length=80)
 
 
-class SelectWaypointForm(forms.Form):
+class SelectElementForm(forms.Form):
     def __init__(self, choices):
         super().__init__()
-        self.fields["select_wp"] = forms.ChoiceField(choices=choices)
+        self.fields["select_element"] = forms.ChoiceField(choices=choices)
+    
+    
 
 class UploadFileForm(forms.Form):
     file = forms.FileField()

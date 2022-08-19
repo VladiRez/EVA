@@ -2,5 +2,6 @@ evasdk
 pyzmq
 pymongo
 Django
+tornado
 
 -e ./DPT/Control/dpt_module
