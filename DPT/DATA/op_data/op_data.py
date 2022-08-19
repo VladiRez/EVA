@@ -16,6 +16,8 @@ import json
 
 from base_module import BaseModule
 
+logging.basicConfig(level=logging.DEBUG)
+
 class OpData(BaseModule):
     """
     Class for interfacing with the Operational Data Storage
@@ -165,7 +167,22 @@ class OpData(BaseModule):
                     else:
                         await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
 
+                case ["TP_MOVE_ACTION_TO_POS", tp_id, from_pos, to_pos]:
+                    tp_id = ObjectId(tp_id)
+                    tp_doc = col_toolpaths.find_one(tp_id)
+                    if tp_doc is None:
+                        await self.server_transmit(sender, resp_id, ("NONEXISTENT_OBJECT",))
+                        continue
 
+                    timeline = tp_doc["timeline"]
+                    element = timeline.pop(from_pos)
+                    timeline.insert(to_pos, element)
+                    new_list = {"$set": {"timeline": timeline}}
+                    result = col_toolpaths.update_one({"_id": tp_id}, new_list)
+                    if result.acknowledged and result.modified_count == 1:
+                        await self.server_transmit(sender, resp_id, ("TP_MOVE_ACTION_TO_POS",))
+                    else:
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
 
                 case ["RM_FROM_TP", tp_id, index]:
                     tp_id = ObjectId(tp_id)

@@ -114,7 +114,8 @@ class EvaInterface(BaseModule):
                                                               "type": "digital", "index": 1},
                                  "value": True})
                             timeline_json.append({"type": "wait", "condition": {"type": "time",
-                                                                                "duration": 0.02}})
+                                                                                "duration": 0.2}})
+
                         elif action == "UNGRIP":
                             timeline_json.append({"type": "wait", "condition": {"type": "time",
                                                                                 "duration": 0.02}})
@@ -129,7 +130,7 @@ class EvaInterface(BaseModule):
                                                               "type": "digital", "index": 0},
                                  "value": True})
                             timeline_json.append({"type": "wait", "condition": {"type": "time",
-                                                                                "duration": 0.02}})
+                                                                                "duration": 0.2}})
                         else:
                             wp_number = action
                             timeline_json.append({"type": "trajectory",
