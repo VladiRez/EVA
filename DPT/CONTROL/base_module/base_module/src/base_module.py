@@ -131,7 +131,7 @@ class BaseModule():
                  
         return
 
-    async def client_transmit(self, address: str, message: tuple) -> None:
+    async def client_transmit(self, address: str, message: tuple) -> bytes:
         """Transmits message to server. 
         A connection to the server has to be already established.
         
@@ -154,11 +154,15 @@ class BaseModule():
         except KeyError:
             raise BaseModuleException("Module with that address not registered.")
 
-        
-        await client_socket.send(msg_bytes, flags=zmq.DONTWAIT)
-        logging.info(f"Send message to {address}: {msg_bytes}")
+        # Create unique request id
+        req_id = (abs(hash(time.time()) + hash(msg_json))).to_bytes(8, byteorder='big')
+        await client_socket.send_multipart([req_id, msg_bytes], flags=zmq.DONTWAIT)
+        logging.info(f"Send message to {address}, request id: {req_id}: {msg_bytes}")
+        return req_id
 
-    async def client_receive(self, address: str, timeout:int =None) -> tuple[object]:
+
+    async def client_receive(self, address: str,  req_id: bytes = None, timeout: int = None) \
+            -> tuple[object]:
         """ Receives a message from a specific server.
         A connection to the server has to be already established.
 
@@ -179,13 +183,16 @@ class BaseModule():
             raise BaseModuleException("Module with that address not registered.")
 
         sock = self.client_sockets[address]
-        event = await sock.poll(timeout=timeout)
-        if event != zmq.POLLIN:
-            raise TimeoutException()
+        while True:
+            event = await sock.poll(timeout=timeout)
+            if event != zmq.POLLIN:
+                raise TimeoutException()
+            resp_id, msg_bytes = await sock.recv_multipart()
 
-        msg_bytes = await sock.recv()
+            if resp_id == req_id or req_id is None:
+                break
         msg_json = msg_bytes.decode('ascii')
-        logging.info(f"Received message From {address}: {msg_json}")
+        logging.info(f"{self.name}: Received message From {address}: {msg_json}")
         msg_pyobj = json.loads(msg_json)  
         return msg_pyobj
 
@@ -193,7 +200,7 @@ class BaseModule():
     # SERVER METHODS
     ##########################################################################
 
-    async def server_transmit(self, address: bytes, message: tuple[object]) -> None:
+    async def server_transmit(self, address: bytes, resp_id: bytes, message: tuple[object]) -> None:
         """Transmits message to connected client.
 
         Parameters:
@@ -206,15 +213,15 @@ class BaseModule():
         msg_json = json.dumps(message)
         msg_bytes = msg_json.encode('ascii')
         logging.info(f"Sending message: {message} to {address}")
-        await self.server_socket.send_multipart([address, msg_bytes])
+        await self.server_socket.send_multipart([address, resp_id, msg_bytes])
 
 
-    async def server_receive(self) -> tuple[bytes, object]:
-        (sender, msg_bytes) = await self.server_socket.recv_multipart()
+    async def server_receive(self) -> tuple[bytes, bytes, object]:
+        (sender, req_id, msg_bytes) = await self.server_socket.recv_multipart()
         msg_json = msg_bytes.decode("ascii")
-        logging.info(f"Received message from {sender}: {msg_json}")
+        logging.info(f"{self.name}: Received message from {sender}: {msg_json}")
         msg_pyobj = json.loads(msg_json)
-        return (sender, msg_pyobj)
+        return (sender, req_id, msg_pyobj)
         
 
     async def flush_server_socket(self) -> None:

@@ -17,21 +17,39 @@
         </ul>
     {% endif %}
     <ol>
-        {% for wp in wp_list %}
-            <li><a href="{% url 'waypoint_detail' wp.0 %}">{{ wp.1 }} --- {{ wp.0 }} --- </a>
-                <form action="{% url 'create_toolpath' %}" method="POST" style="display:inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="wp_index" value="{{ wp.2 }}" />
-                    <input type="submit" name="delete" value="Delete"/>
-                </form>
-            </li>
+        {% for action in timeline %}
+            {% if action.1 == "GRIP" or action.1 == "UNGRIP" %}
+                <li><a>{{ action.1 }} ...................................................................... </a>
+                    <form action="{% url 'create_toolpath' %}" method="POST" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="wp_index" value="{{ action.0 }}" />
+                        <input type="submit" name="delete" value="Delete"/>
+                    </form>
+                </li>
+            {% else %}
+                <li><a href="{% url 'waypoint_detail' action.1 %}">{{ action.2 }} --- {{ action.1 }} --- </a>
+                    <form action="{% url 'create_toolpath' %}" method="POST" style="display:inline;">
+                        {% csrf_token %}
+                        <input type="hidden" name="wp_index" value="{{ action.0 }}" />
+                        <input type="submit" name="delete" value="Delete"/>
+                    </form>
+                </li>
+            {% endif %}
         {% endfor %}
     </ol>
     {% if not error %}
         <form action="{% url 'create_toolpath' %}" method="POST">
             {% csrf_token %}
-            {{ select_wp_form }}
-            <input type="submit" name="add_to_tp" value="Add to toolpath"/>
+            {{ select_element_form }}
+            <input type="submit" name="add_wp_to_tp" value="Add WP to Toolpath"/>
+        </form>
+        <form action="{% url 'create_toolpath' %}" method="POST">
+            {% csrf_token %}
+            <input type="submit" name="add_grip_to_tp" value="Add Grip to Toolpath"/>
+        </form>
+        <form action="{% url 'create_toolpath' %}" method="POST">
+            {% csrf_token %}
+            <input type="submit" name="add_ungrip_to_tp" value="Add Ungrip to Toolpath"/>
         </form>
         <br>
         <form action="{% url 'create_toolpath' %}" method="POST">

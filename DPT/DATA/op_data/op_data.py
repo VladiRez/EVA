@@ -51,7 +51,8 @@ class OpData(BaseModule):
 
         while True:
             
-            (sender, msg) = await self.server_receive()
+            (sender, req_id, msg) = await self.server_receive()
+            resp_id = req_id
 
             match msg:
                 case ["SHUTDOWN"]:
@@ -66,13 +67,13 @@ class OpData(BaseModule):
                     wp_id = ObjectId(wp_id) # Convert to mongodb id object
                     wp_doc = col_waypoints.find_one(wp_id)
                     if wp_doc is None:
-                        await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(wp_id)))
+                        await self.server_transmit(sender, resp_id, ("NONEXISTENT_OBJECT", str(wp_id)))
                         continue
 
                     wp_coor = wp_doc["coordinates"]
                     wp_name = wp_doc["wp_name"]
                     wp_time = wp_doc["creation_time"]
-                    await self.server_transmit(sender, 
+                    await self.server_transmit(sender, resp_id, 
                         ("GET_WP", str(wp_id), wp_name, wp_coor, wp_time))
                 
                 case ["GET_ALL_WP_IDS"]:
@@ -80,24 +81,24 @@ class OpData(BaseModule):
                     wp_all_ids = [str(wp["_id"]) for wp in all_wps_cursor]
                     all_wps_cursor = col_waypoints.find({})
                     wp_all_names = [wp["wp_name"] for wp in all_wps_cursor]
-                    await self.server_transmit(sender, ("GET_ALL_WP_IDS", wp_all_ids, wp_all_names))
+                    await self.server_transmit(sender, resp_id, ("GET_ALL_WP_IDS", wp_all_ids, wp_all_names))
 
                 case ["DEL_WP", wp_id]:
                     wp_id = ObjectId(wp_id)
                     result = col_waypoints.delete_one({"_id": wp_id})
                     if result.acknowledged and result.deleted_count == 1:
-                        await self.server_transmit(sender, ("DEL_WP",))
+                        await self.server_transmit(sender, resp_id, ("DEL_WP",))
                     else:
-                        await self.server_transmit(sender, ("UNEXPECTED_FAILURE",))
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
 
                 case ["CHANGE_WP_NAME", wp_id, wp_name]:
                     wp_id = ObjectId(wp_id)
                     new_value = {"$set": {"wp_name": wp_name}}
                     result = col_waypoints.update_one({"_id": wp_id}, new_value)
                     if result.acknowledged and result.modified_count == 1:
-                        await self.server_transmit(sender, ("CHANGE_WP_NAME",))
+                        await self.server_transmit(sender, resp_id, ("CHANGE_WP_NAME",))
                     else:
-                        await self.server_transmit(sender, ("UNEXPECTED_FAILURE",))
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
 
                 case ["NEW_TP"]:
                     pass
@@ -106,47 +107,84 @@ class OpData(BaseModule):
                     tp_id = ObjectId(tp_id)
                     tp_doc = col_toolpaths.find_one(tp_id)
                     if tp_doc is None:
-                        await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(tp_id)))
+                        await self.server_transmit(sender, resp_id, ("NONEXISTENT_OBJECT", str(tp_id)))
                         continue
 
-                    wp_list = tp_doc["wps"]
-                    await self.server_transmit(sender, ("GET_TP", str(tp_id), wp_list))
+                    timeline = tp_doc["timeline"]
+                    await self.server_transmit(sender, resp_id, ("GET_TP", str(tp_id), timeline))
 
-                case ["ADD_TO_TP", tp_id, wp_id]:
+                case ["ADD_WP_TO_TP", tp_id, wp_id]:
 
                     tp_id = ObjectId(tp_id)
                     tp_doc = col_toolpaths.find_one(tp_id)
                     if tp_doc is None:
-                        await self.server_transmit(sender, ("NONEXISTENT_OBJECT", str(tp_id)))
+                        await self.server_transmit(sender, resp_id,
+                                                   ("NONEXISTENT_OBJECT", str(tp_id)))
                         continue
 
-                    wp_list = tp_doc["wps"]
-                    wp_list.append(wp_id)
-                    new_list = {"$set": {"wps": wp_list}}
+                    timeline = tp_doc["timeline"]
+                    timeline.append(wp_id)
+                    new_list = {"$set": {"timeline": timeline}}
                     result = col_toolpaths.update_one({"_id": tp_id}, new_list)
                     if result.acknowledged and result.modified_count == 1:
-                        await self.server_transmit(sender, ("ADD_TO_TP",))
+                        await self.server_transmit(sender, resp_id, ("ADD_WP_TO_TP",))
                     else:
-                        await self.server_transmit(sender, ("UNEXPECTED_FAILURE",))
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
+
+                case ["ADD_GRIP_TO_TP", tp_id]:
+                    tp_id = ObjectId(tp_id)
+                    tp_doc = col_toolpaths.find_one(tp_id)
+                    if tp_doc is None:
+                        await self.server_transmit(sender, resp_id,
+                                                   ("NONEXISTENT_OBJECT", str(tp_id)))
+                        continue
+
+                    timeline = tp_doc["timeline"]
+                    timeline.append("GRIP")
+                    new_list = {"$set": {"timeline": timeline}}
+                    result = col_toolpaths.update_one({"_id": tp_id}, new_list)
+                    if result.acknowledged and result.modified_count == 1:
+                        await self.server_transmit(sender, resp_id, ("ADD_GRIP_TO_TP",))
+                    else:
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
+
+                case ["ADD_UNGRIP_TO_TP", tp_id]:
+                    tp_id = ObjectId(tp_id)
+                    tp_doc = col_toolpaths.find_one(tp_id)
+                    if tp_doc is None:
+                        await self.server_transmit(sender, resp_id,
+                                                   ("NONEXISTENT_OBJECT", str(tp_id)))
+                        continue
+
+                    timeline = tp_doc["timeline"]
+                    timeline.append("UNGRIP")
+                    new_list = {"$set": {"timeline": timeline}}
+                    result = col_toolpaths.update_one({"_id": tp_id}, new_list)
+                    if result.acknowledged and result.modified_count == 1:
+                        await self.server_transmit(sender, resp_id, ("ADD_UNGRIP_TO_TP",))
+                    else:
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
+
+
 
                 case ["RM_FROM_TP", tp_id, index]:
                     tp_id = ObjectId(tp_id)
                     tp_doc = col_toolpaths.find_one(tp_id)
                     if tp_doc is None:
-                        await self.server_transmit(sender, ("NONEXISTENT_OBJECT",))
+                        await self.server_transmit(sender, resp_id, ("NONEXISTENT_OBJECT",))
                         continue
 
-                    wp_list = tp_doc["wps"]
-                    wp_list.pop(index)
-                    new_list = {"$set": {"wps": wp_list}}
+                    timeline = tp_doc["timeline"]
+                    timeline.pop(index)
+                    new_list = {"$set": {"timeline": timeline}}
                     result = col_toolpaths.update_one({"_id": tp_id}, new_list)
                     if result.acknowledged and result.modified_count == 1:
-                        await self.server_transmit(sender, ("RM_FROM_TP",))
+                        await self.server_transmit(sender, resp_id, ("RM_FROM_TP",))
                     else:
-                     await self.server_transmit(sender, ("UNEXPECTED_FAILURE",))
+                     await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
                                     
                 case _:
-                    await self.server_transmit(sender, ("UNKNOWN_REQUEST",))
+                    await self.server_transmit(sender, resp_id, ("UNKNOWN_REQUEST",))
 
 if __name__ == "__main__":
     opd = OpData()
