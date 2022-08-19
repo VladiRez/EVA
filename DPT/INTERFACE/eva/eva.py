@@ -32,11 +32,11 @@ class EvaInterface(BaseModule):
     """
 
     def __init__(self):
-        super().__init__()
+        super().__init__("eva-interface", 5557)
 
-        self.OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
-        op_data_server_count = int(os.environ["OP_DATA_SERVER_COUNT"])
-        self.register_connection(self.OP_DATA_ADDR, op_data_server_count) 
+        self.OP_DATA_ADDR = "127.0.0.1:5556"
+        op_data_server_count = 1
+        self.register_connection(self.OP_DATA_ADDR, op_data_server_count)
 
         # Eva Setup
         host = '192.168.152.106'
@@ -45,7 +45,7 @@ class EvaInterface(BaseModule):
 
         self.backdriving_task = None
 
-        self.start(self.service_loop())
+        self.awaitable = self.start(self.service_loop())
 
     async def service_loop(self) -> None:
         """ Loop for listening to incoming requests.

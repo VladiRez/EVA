@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-@hht)x_qdtvgp=i5@_zwflhqtm1^sdjtdy28$eme&vma!6!9z7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_CIDR_NETS = [os.environ["WEBSERVER_IP"]]
+ALLOWED_CIDR_NETS = ["127.0.0.0/24"]
 
 
 # Application definition

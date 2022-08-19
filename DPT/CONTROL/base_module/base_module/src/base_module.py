@@ -57,21 +57,20 @@ class BaseModule():
 
     """
 
-    def __init__(self):   
+    def __init__(self, module_name: str, zmq_port: int):
 
         logging.basicConfig(format='%(asctime)s %(message)s',
                             level=logging.INFO)
 
         # Module Parameters
-        self.zmq_port = os.environ["ZMQ_PORT"]
         unique_id = hash(time.time() + random.randint(0, 1024))
-        self.name = os.environ["MODULE_NAME"] + "_" + str(unique_id)
+        self.name = module_name + "_" + str(unique_id)
         
         # ZeroMQ Setup        
         self.context = zmq.asyncio.Context()
         self.client_sockets = {}
         self.server_socket = self.context.socket(zmq.ROUTER)
-        self.server_socket.bind(f"tcp://*:{self.zmq_port}")        
+        self.server_socket.bind(f"tcp://*:{zmq_port}")
 
         self.shutdown_signal = asyncio.Event()
 
@@ -85,9 +84,9 @@ class BaseModule():
 
     async def __entrypoint(self, *funcs):
         """Run this method in a asyncio.run() loop in the module itself"""
-        loop = asyncio.get_event_loop()
-        loop.add_signal_handler(signal.SIGINT, self.__set_shutdown_signal)
-        loop.add_signal_handler(signal.SIGTERM, self.__set_shutdown_signal)
+        #loop = asyncio.get_event_loop()
+        #loop.add_signal_handler(signal.SIGINT, self.__set_shutdown_signal)
+        #loop.add_signal_handler(signal.SIGTERM, self.__set_shutdown_signal)
 
         tasks = asyncio.gather(*funcs)
         await self.shutdown_signal.wait()
@@ -107,7 +106,7 @@ class BaseModule():
             Wildcard notation: Pass multiple async functions if needed.
         """
         awaitable = self.__entrypoint(*funcs)
-        asyncio.run(awaitable)
+        return awaitable
 
     # CLIENT METHODS
     ##########################################################################
@@ -125,7 +124,7 @@ class BaseModule():
         new_socket.setsockopt_string(zmq.IDENTITY, self.name)
 
         for _ in range(server_count*2):
-            new_socket.connect(f"tcp://{address}:{self.zmq_port}")
+            new_socket.connect(f"tcp://{address}")
         
         self.client_sockets[address] = new_socket 
                  
@@ -156,7 +155,7 @@ class BaseModule():
 
         
         await client_socket.send(msg_bytes, flags=zmq.DONTWAIT)
-        logging.info(f"Send message to {address}: {msg_bytes}")
+        logging.info(f"{self.name}: Send message to {address}: {msg_bytes}")
 
     async def client_receive(self, address: str, timeout:int =None) -> tuple[object]:
         """ Receives a message from a specific server.
@@ -185,7 +184,7 @@ class BaseModule():
 
         msg_bytes = await sock.recv()
         msg_json = msg_bytes.decode('ascii')
-        logging.info(f"Received message From {address}: {msg_json}")
+        logging.info(f"{self.name}: Received message From {address}: {msg_json}")
         msg_pyobj = json.loads(msg_json)  
         return msg_pyobj
 
@@ -205,14 +204,14 @@ class BaseModule():
         
         msg_json = json.dumps(message)
         msg_bytes = msg_json.encode('ascii')
-        logging.info(f"Sending message: {message} to {address}")
+        logging.info(f"{self.name}: Sending message: {message} to {address}")
         await self.server_socket.send_multipart([address, msg_bytes])
 
 
     async def server_receive(self) -> tuple[bytes, object]:
         (sender, msg_bytes) = await self.server_socket.recv_multipart()
         msg_json = msg_bytes.decode("ascii")
-        logging.info(f"Received message from {sender}: {msg_json}")
+        logging.info(f"{self.name}: Received message from {sender}: {msg_json}")
         msg_pyobj = json.loads(msg_json)
         return (sender, msg_pyobj)
         

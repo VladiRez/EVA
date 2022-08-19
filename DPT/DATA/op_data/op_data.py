@@ -31,14 +31,14 @@ class OpData(BaseModule):
     """
 
     def __init__(self):
-        super().__init__()
+        super().__init__("op-data", 5556)
 
         # MongoDB Setup
-        db_address = os.environ["DB_ADDRESS"]
+        db_address = "127.0.0.1"
         self.client = MongoClient(db_address)
         self.db = self.client["dpt_op_data"]
 
-        self.start(self.service_loop())
+        self.awaitable = self.start(self.service_loop())
 
     async def service_loop(self) -> None:
         """

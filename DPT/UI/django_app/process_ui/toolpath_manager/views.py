@@ -11,12 +11,12 @@ import logging
 
 from base_module import BaseModule, TimeoutException
 
-OP_DATA_ADDR = os.environ["OP_DATA_ADDR"]
-EVA_INTERFACE_ADDR = os.environ["EVA_INTERFACE_ADDR"]
-op_data_server_count = int(os.environ["OP_DATA_SERVER_COUNT"])
-eva_interface_server_count = int(os.environ["EVA_INTERFACE_SERVER_COUNT"])
+OP_DATA_ADDR = "127.0.0.1:5556"
+EVA_INTERFACE_ADDR = "127.0.0.1:5557"
+op_data_server_count = 1
+eva_interface_server_count = 1
 
-ui_module = BaseModule()
+ui_module = BaseModule("process-ui", 5558)
 ui_module.register_connection(OP_DATA_ADDR, op_data_server_count)
 ui_module.register_connection(EVA_INTERFACE_ADDR, eva_interface_server_count)
 
