@@ -40,7 +40,7 @@
     {% if not error %}
         <form action="{% url 'create_toolpath' %}" method="POST">
             {% csrf_token %}
-            {{ select_element_form }}
+            {{ choose_waypoint_form }}
             <input type="submit" name="add_wp_to_tp" value="Add WP to Toolpath"/>
         </form>
         <form action="{% url 'create_toolpath' %}" method="POST">
@@ -50,6 +50,13 @@
         <form action="{% url 'create_toolpath' %}" method="POST">
             {% csrf_token %}
             <input type="submit" name="add_ungrip_to_tp" value="Add Ungrip to Toolpath"/>
+        </form>
+        <br>
+        <form action="{% url 'create_toolpath' %}" method="POST">
+            {% csrf_token %}
+            <a> Move Element: </a>
+            {{ move_element_from_form }}
+            <input type="submit" name="move_element" value="Move Element"/>
         </form>
         <br>
         <form action="{% url 'create_toolpath' %}" method="POST">

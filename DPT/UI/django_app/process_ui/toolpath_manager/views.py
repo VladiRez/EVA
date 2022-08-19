@@ -246,15 +246,11 @@ async def create_toolpath(request):
                                                 ("EXECUTE_TP", unique_wps, timeline))
             except TimeoutException:
                 errors.append("Timeout: No response from EVA INTERFACE")
+                
         elif "add_wp_to_tp" in request.POST:
-            #select_element_form = SelectElementForm(request.POST)
-            #if not select_element_form.is_valid():
-            #    errors.append("Invalid Selection.")
-            #else:
-            #wp_to_add = select_element_form.data["select_element"]
-            wp_to_add = request.POST.get("select_element")
-            await ui_module.client_transmit(OP_DATA_ADDR, ("ADD_WP_TO_TP", "62f501fd498cc3cb66b88f89",
-                                           wp_to_add))
+            wp_to_add = request.POST.get("choose_waypoint")
+            await ui_module.client_transmit(OP_DATA_ADDR,
+                    ("ADD_WP_TO_TP", "62f501fd498cc3cb66b88f89", wp_to_add))
             try:
                 msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                 response = msg[0]
@@ -294,6 +290,24 @@ async def create_toolpath(request):
             except TimeoutException:
                 errors.append("Timeout: No response from Database")
 
+        elif "move_element" in request.POST:
+            try:
+                move_from = int(request.POST.get("from_position")) - 1
+                move_to = int(request.POST.get("to_position")) - 1
+                await ui_module.client_transmit(OP_DATA_ADDR, ("TP_MOVE_ACTION_TO_POS",
+                        "62f501fd498cc3cb66b88f89", move_from, move_to))
+                msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
+                response = msg[0]
+                if response == "TP_MOVE_ACTION_TO_POS":
+                    element = tp_timeline.pop(move_from)
+                    tp_timeline.insert(move_to, element)
+                    messages.info(request, "Sucessfully moved element.")
+                else:
+                    errors.append("Could not move element.")
+
+            except TimeoutException:
+                errors.append("Timeout: No Response from Database")
+
         elif "delete" in request.POST:
             try:
                 wp_index = int(request.POST.get("wp_index"))
@@ -319,12 +333,18 @@ async def create_toolpath(request):
                 wp_id = action
                 displayed_timeline.append((ind, wp_id, wp_dict[wp_id]))
     if wp_tuple is None:
-        select_element_form = SelectElementForm(choices=())
+        choose_waypoint_form = ChooseWaypointForm(choices=())
     else:
-        select_element_form = SelectElementForm(wp_tuple)
+        choose_waypoint_form = ChooseWaypointForm(wp_tuple)
 
-    logging.info(displayed_timeline)
-    context = {"select_element_form": select_element_form, "timeline": displayed_timeline, "errors": errors}
+    if tp_timeline is None:
+        move_element_choices = ()
+    else:
+        move_element_choices = tuple((i, i) for i in range(1, len(tp_timeline)+1))
+    move_element_from_from = MoveElementForm(choices=move_element_choices)
+
+    context = {"choose_waypoint_form": choose_waypoint_form, "timeline": displayed_timeline,
+               "move_element_from_form": move_element_from_from, "errors": errors}
 
     return render(request, "toolpath_manager/toolpath_editor.html", context=context)
 
@@ -333,12 +353,19 @@ class ChangeNameForm(forms.Form):
     new_name = forms.CharField(label="Name ändern: ", max_length=80)
 
 
-class SelectElementForm(forms.Form):
+class ChooseWaypointForm(forms.Form):
     def __init__(self, choices):
         super().__init__()
-        self.fields["select_element"] = forms.ChoiceField(choices=choices)
-    
-    
+        self.fields["choose_waypoint"] = forms.ChoiceField(choices=choices)
+
+
+class MoveElementForm(forms.Form):
+    def __init__(self, choices):
+        super().__init__()
+        self.fields["from_position"] = forms.ChoiceField(choices=choices)
+
+        self.fields["to_position"] = forms.ChoiceField(choices=choices)
+
 
 class UploadFileForm(forms.Form):
     file = forms.FileField()
