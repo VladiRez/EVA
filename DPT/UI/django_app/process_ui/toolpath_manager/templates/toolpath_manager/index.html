@@ -5,33 +5,27 @@
     <title>Saved Waypoints</title>
   </head>
   <body>
-    {% if errors %}
-        {% for error in errors %}
-            <li>ERROR --- {{ error }} </li>
-        {% endfor %}
-    {% else %}
-        <h1> DPT Main User Interface for the EVA Robot</h1>
-        {% if messages %}
-            <ul class="messages">
-                {% for message in messages %}
-                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
-                {% endfor %}
-            </ul>
-        {% endif %}
-        <p>Saved waypoints: </p>
-        <ul>
-            {% for wp in wps %}
-                <li><a href="{% url 'waypoint_detail' wp.0 %}">{{ wp.0 }}: {{ wp.1 }} </a></li>
+    <h1> DPT Main User Interface for the EVA Robot</h1>
+    {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+                <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
             {% endfor %}
         </ul>
-        <form action="{% url 'backdriving' %}" method="get">
-            {% csrf_token %}
-            <button type="submit">
-                Backdriving mode
-            </button>
-        </form>
-        <br>
-        <a href="{% url 'toolpath_index' %}">Toolpath Index</a>
     {% endif %}
+    <p>Saved waypoints: </p>
+    <ul>
+        {% for wp in wps %}
+            <li><a href="{% url 'waypoint_detail' wp.0 %}">{{ wp.0 }}: {{ wp.1 }} </a></li>
+        {% endfor %}
+    </ul>
+    <form action="{% url 'backdriving' %}" method="get">
+        {% csrf_token %}
+        <button type="submit">
+            Backdriving mode
+        </button>
+    </form>
+    <br>
+    <a href="{% url 'toolpath_index' %}">Toolpath Index</a>
   </body>
 </html>
