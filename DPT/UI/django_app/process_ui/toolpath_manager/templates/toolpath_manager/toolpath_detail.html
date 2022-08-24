@@ -5,7 +5,9 @@
     <title>Toolpath Editor</title>
 </head>
 <body>
-    <h2> Waypoints in Toolpath 62f501fd498cc3cb66b88f89 </h2>
+    <h1> Toolpath details for toolpath: </h1>
+    <h2> {{ tp_name }} </h2>
+    <h3> {{ tp_id }} </h3>
     {% for error in errors %}
         <li>ERROR --- {{ error }} </li>
     {% endfor %}
@@ -16,11 +18,23 @@
           {% endfor %}
         </ul>
     {% endif %}
+    <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
+        {% csrf_token %}
+        {{ name_form }}
+        <input type="submit" name="change_name" value="Change Toolpath Name"/>
+    </form>
+    <br>
+    <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
+        {% csrf_token %}
+        <input type="submit" name="delete" value="Delete Toolpath"/>
+    </form>
+    <br>
+    <h3> Timeline Management </h3>
     <ol>
         {% for action in timeline %}
             {% if action.1 == "GRIP" or action.1 == "UNGRIP" %}
                 <li><a>{{ action.1 }} ...................................................................... </a>
-                    <form action="{% url 'create_toolpath' %}" method="POST" style="display:inline;">
+                    <form action="{% url 'toolpath_detail' tp_id %}" method="POST" style="display:inline;">
                         {% csrf_token %}
                         <input type="hidden" name="wp_index" value="{{ action.0 }}" />
                         <input type="submit" name="delete" value="Delete"/>
@@ -28,7 +42,7 @@
                 </li>
             {% else %}
                 <li><a href="{% url 'waypoint_detail' action.1 %}">{{ action.2 }} --- {{ action.1 }} --- </a>
-                    <form action="{% url 'create_toolpath' %}" method="POST" style="display:inline;">
+                    <form action="{% url 'toolpath_detail' tp_id %}" method="POST" style="display:inline;">
                         {% csrf_token %}
                         <input type="hidden" name="wp_index" value="{{ action.0 }}" />
                         <input type="submit" name="delete" value="Delete"/>
@@ -38,38 +52,34 @@
         {% endfor %}
     </ol>
     {% if not error %}
-        <form action="{% url 'create_toolpath' %}" method="POST">
+        <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
             {% csrf_token %}
             {{ choose_waypoint_form }}
             <input type="submit" name="add_wp_to_tp" value="Add WP to Toolpath"/>
         </form>
-        <form action="{% url 'create_toolpath' %}" method="POST">
+        <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
             {% csrf_token %}
             <input type="submit" name="add_grip_to_tp" value="Add Grip to Toolpath"/>
         </form>
-        <form action="{% url 'create_toolpath' %}" method="POST">
+        <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
             {% csrf_token %}
             <input type="submit" name="add_ungrip_to_tp" value="Add Ungrip to Toolpath"/>
         </form>
         <br>
-        <form action="{% url 'create_toolpath' %}" method="POST">
+        <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
             {% csrf_token %}
             <a> Move Element: </a>
             {{ move_element_from_form }}
             <input type="submit" name="move_element" value="Move Element"/>
         </form>
         <br>
-        <form action="{% url 'create_toolpath' %}" method="POST">
+        <br>
+        <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
             {% csrf_token %}
             <input type="submit" name="execute" value="Execute Toolpath"/>
         </form>
         <br>
     {% endif %}
-    <form action="{% url 'index' %}" method="GET">
-      {% csrf_token %}
-      <button type="submit">
-        Click here to go back.
-      </button>
-    </form>
+    <a href="{% url 'toolpath_index' %}">Go back</a>
 </body>
 </html>

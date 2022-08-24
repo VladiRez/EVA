@@ -6,6 +6,6 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("backdriving", views.backdriving, name="backdriving"),
     path("wp/<str:wp_id>", views.waypoint_detail, name="waypoint_detail"),
-    path("wp/del/<str:wp_id>", views.waypoint_detail, {"delete": True}, name="waypoint_delete"),
-    path("create", views.create_toolpath, name="create_toolpath")
+    path("tp", views.toolpath_index, name="toolpath_index"),
+    path("tp/<str:tp_id>", views.toolpath_detail, name="toolpath_detail")
 ]

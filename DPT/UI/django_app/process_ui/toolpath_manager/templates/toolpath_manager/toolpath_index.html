@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Toolpath Index</title>
+</head>
+<body>
+    {% if errors %}
+        {% for error in errors %}
+            <li>ERROR --- {{ error }} </li>
+        {% endfor %}
+    {% else %}
+        <h1> Toolpath Index </h1>
+        {% if messages %}
+            <ul class="messages">
+                {% for message in messages %}
+                    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        <p>Saved Toolpaths: </p>
+        <ul>
+            {% for tp in tps %}
+                <li><a href="{% url 'toolpath_detail' tp.0 %}">{{ tp.0 }}: {{ tp.1 }} </a></li>
+            {% endfor %}
+        </ul>
+        <form action="{% url 'toolpath_index' %}" method="POST">
+            {% csrf_token %}
+            <input type="submit" name="new_tp" value="Create New Toolpath"/>
+        </form>
+        <br>
+        <a href="{% url 'index' %}"> Back to Waypoint index</a>
+    {% endif %}
+ </body>
+</html>
