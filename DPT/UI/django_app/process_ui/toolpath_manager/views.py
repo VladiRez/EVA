@@ -65,7 +65,7 @@ async def backdriving(request):
             raise ResponseException("""Unknown Error""")
 
     except (TimeoutException, ResponseException) as ex:
-        print(ex)
+        HttpResponse(ex)
 
     context = {}
     return render(request, "toolpath_manager/backdriving.html", context=context)
@@ -112,8 +112,7 @@ async def waypoint_detail(request, wp_id):
             else:
                 raise ResponseException(f"Could not delete waypoint: {response}")
         elif "goto" in request.POST:
-            req_id = await ui_module.client_transmit(EVA_INTERFACE_ADDR, req_id,
-                                                     ("GOTO_WP", joint_angles))
+            req_id = await ui_module.client_transmit(EVA_INTERFACE_ADDR, ("GOTO_WP", joint_angles))
             msg = await ui_module.client_receive(EVA_INTERFACE_ADDR, req_id, timeout=10000)
 
             response = msg[0]
@@ -237,16 +236,16 @@ async def toolpath_detail(request, tp_id="62f501fd498cc3cb66b88f89"):
                 else:
                     raise ResponseException("Could not get waypoint information")
 
-                timeline = []
-                for action in tp_timeline:
-                    if action in ("GRIP", "UNGRIP"):
-                        timeline.append(action)
-                    else:
-                        wp_id = action
-                        timeline.append(wp_number_dict[wp_id])
+            timeline = []
+            for action in tp_timeline:
+                if action in ("GRIP", "UNGRIP"):
+                    timeline.append(action)
+                else:
+                    wp_id = action
+                    timeline.append(wp_number_dict[wp_id])
 
-                req_id = await ui_module.client_transmit(EVA_INTERFACE_ADDR,
-                                                         ("EXECUTE_TP", unique_wps, timeline))
+            req_id = await ui_module.client_transmit(EVA_INTERFACE_ADDR,
+                                                     ("EXECUTE_TP", unique_wps, timeline))
 
         elif "add_wp_to_tp" in request.POST:
             wp_to_add = request.POST.get("choose_waypoint")
