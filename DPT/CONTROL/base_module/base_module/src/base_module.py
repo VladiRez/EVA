@@ -185,7 +185,7 @@ class BaseModule():
         while True:
             event = await sock.poll(timeout=timeout)
             if event != zmq.POLLIN:
-                raise TimeoutException()
+                raise TimeoutException(address, req_id)
             resp_id, msg_bytes = await sock.recv_multipart()
 
             if resp_id == req_id or req_id is None:
@@ -237,8 +237,14 @@ class BaseModuleException(Exception):
     def __init__(self,*args,**kwargs):
         Exception.__init__(self,*args,**kwargs)
 
-class TimeoutException(BaseModuleException):
-    def __init__(self,*args,**kwargs):
-        super().__init__(self,*args,**kwargs)
 
+class TimeoutException(BaseModuleException):
+    def __init__(self, address, req_id, *args, **kwargs):
+        super().__init__(self, *args, **kwargs)
+        self.address = address
+        self.req_id = req_id
+
+    def __str__(self):
+        return f"""Timeout when trying to receive from {self.address} 
+                   during request with request id {self.req_id}"""
 

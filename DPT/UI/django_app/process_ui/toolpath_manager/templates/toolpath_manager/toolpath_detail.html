@@ -32,12 +32,12 @@
     <h3> Timeline Management </h3>
     <ol>
         {% for action in timeline %}
-            {% if action.1 == "GRIP" or action.1 == "UNGRIP" %}
+            {% if action.1 == "GRIP" or action.1 == "UNGRIP" or action.1 == "DELETED_WP" %}
                 <li><a>{{ action.1 }} ...................................................................... </a>
                     <form action="{% url 'toolpath_detail' tp_id %}" method="POST" style="display:inline;">
                         {% csrf_token %}
                         <input type="hidden" name="wp_index" value="{{ action.0 }}" />
-                        <input type="submit" name="delete" value="Delete"/>
+                        <input type="submit" name="rm_from_tp" value="Delete"/>
                     </form>
                 </li>
             {% else %}
@@ -45,7 +45,7 @@
                     <form action="{% url 'toolpath_detail' tp_id %}" method="POST" style="display:inline;">
                         {% csrf_token %}
                         <input type="hidden" name="wp_index" value="{{ action.0 }}" />
-                        <input type="submit" name="delete" value="Delete"/>
+                        <input type="submit" name="rm_from_tp" value="Delete"/>
                     </form>
                 </li>
             {% endif %}
@@ -69,7 +69,7 @@
         <form action="{% url 'toolpath_detail' tp_id %}" method="POST">
             {% csrf_token %}
             <a> Move Element: </a>
-            {{ move_element_from_form }}
+            {{ move_element_form }}
             <input type="submit" name="move_element" value="Move Element"/>
         </form>
         <br>
