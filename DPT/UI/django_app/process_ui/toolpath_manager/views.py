@@ -72,7 +72,7 @@ async def backdriving(request):
     return render(request, "toolpath_manager/backdriving.html", context=context)
 
 
-async def waypoint_detail(request, wp_id, delete=False):
+async def waypoint_detail(request, wp_id):
     """ Detailed information regarding the selected waypoint.
     """
 
@@ -181,7 +181,33 @@ async def waypoint_detail(request, wp_id, delete=False):
     return render(request, "toolpath_manager/waypoint_detail.html", context)
 
 
-async def create_toolpath(request):
+async def toolpath_index(request):
+    errors = []
+
+    if request.method == "POST":
+        if "new_tp" in request.POST:
+            req_id = await ui_module.client_transmit(OP_DATA_ADDR, ("NEW_TP",))
+            try:
+                msg = await ui_module.client_receive(OP_DATA_ADDR, req_id, timeout=5000)
+                (response, tp_id) = msg
+                messages.info(request, f"Created New Waypoint with ID: {tp_id}")
+            except TimeoutException:
+                errors.append("Timeout: No response from Database")
+
+    req_id = await ui_module.client_transmit(OP_DATA_ADDR, ("GET_ALL_TP_IDS",))
+    tp_tuple = None
+
+    try:
+        (response, ids, names) = await ui_module.client_receive(OP_DATA_ADDR, req_id, timeout=1000)
+        tp_tuple = zip(ids, names)
+    except TimeoutException:
+        errors.append("Timeout: No response from Database")
+
+
+    context = {"tps": tp_tuple, "errors": errors}
+    return render(request, "toolpath_manager/toolpath_index.html", context=context)
+
+async def toolpath_detail(request, tp_id="62f501fd498cc3cb66b88f89"):
     errors = []
 
     # Get all waypoint ids and names from DB for the selection box
@@ -197,23 +223,61 @@ async def create_toolpath(request):
         errors.append("Timeout: No response from Database")
 
     # Get list of waypoints in the toolpath
-    req_id = await ui_module.client_transmit(OP_DATA_ADDR, ("GET_TP", "62f501fd498cc3cb66b88f89"))
+    req_id = await ui_module.client_transmit(OP_DATA_ADDR, ("GET_TP", tp_id))
     tp_timeline = None
+    tp_name = None
     try:
         msg = await ui_module.client_receive(OP_DATA_ADDR, req_id, timeout=1000)
         response = msg[0]
         if response == "GET_TP":
-            (response, tp_id, tp_timeline) = msg
+            (response, tp_id, tp_name, tp_timeline) = msg
         else:
             errors.append(f"Error when getting Toolpath from DB: {response}")
     except TimeoutException:
         errors.append("Timeout: No response from Database")
 
+    name_form = None
+
     # PROCESS POSTS
     ##############################################################################################
 
     if request.method == "POST":
-        if "execute" in request.POST:
+        if "change_name" in request.POST:
+            name_form = ChangeNameForm(request.POST)
+            if not name_form.is_valid():
+                errors.append("Invalid Name.")
+
+            else:
+                new_name = name_form.cleaned_data["new_name"]
+                tp_name = new_name
+                req_id = await ui_module.client_transmit(OP_DATA_ADDR,
+                                                         ("CHANGE_TP_NAME", tp_id, new_name))
+                try:
+                    msg = await ui_module.client_receive(OP_DATA_ADDR, req_id, timeout=500)
+
+                    response = msg[0]
+                    if response == "CHANGE_TP_NAME":
+                        messages.info(request, "Name changed successfully!")
+                    else:
+                        errors.append(f"Could not rename waypoint: {response}")
+
+                except TimeoutException:
+                    errors.append("Timeout: No Response from Database")
+
+        if "delete" in request.POST:
+            try:
+                req_id = await ui_module.client_transmit(OP_DATA_ADDR, ("DEL_TP", tp_id))
+                msg = await ui_module.client_receive(OP_DATA_ADDR, req_id, timeout=100)
+
+                response = msg[0]
+                if response == "DEL_TP":
+                    messages.info(request, "Toolpath successfully deleted.")
+                else:
+                    errors.append(request, f"Could not delete waypoint: {response}")
+
+            except TimeoutException:
+                errors.append("Timeout: No Response from Database")
+        elif "execute" in request.POST:
             # The timeline is a list with actions, i.e. waypoints, grips
             # Filter only the waypoints and remove duplicates:
             wp_ids = filter(lambda action: action not in ("GRIP", "UNGRIP"), tp_timeline)
@@ -250,7 +314,7 @@ async def create_toolpath(request):
         elif "add_wp_to_tp" in request.POST:
             wp_to_add = request.POST.get("choose_waypoint")
             await ui_module.client_transmit(OP_DATA_ADDR,
-                    ("ADD_WP_TO_TP", "62f501fd498cc3cb66b88f89", wp_to_add))
+                    ("ADD_WP_TO_TP", tp_id, wp_to_add))
             try:
                 msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                 response = msg[0]
@@ -264,7 +328,7 @@ async def create_toolpath(request):
 
         elif "add_grip_to_tp" in request.POST:
             await ui_module.client_transmit(OP_DATA_ADDR,
-                                            ("ADD_GRIP_TO_TP", "62f501fd498cc3cb66b88f89",))
+                                            ("ADD_GRIP_TO_TP", tp_id,))
             try:
                 msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                 response = msg[0]
@@ -278,7 +342,7 @@ async def create_toolpath(request):
 
         elif "add_ungrip_to_tp" in request.POST:
             await ui_module.client_transmit(OP_DATA_ADDR,
-                                            ("ADD_UNGRIP_TO_TP", "62f501fd498cc3cb66b88f89",))
+                                            ("ADD_UNGRIP_TO_TP", tp_id,))
             try:
                 msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                 response = msg[0]
@@ -295,7 +359,7 @@ async def create_toolpath(request):
                 move_from = int(request.POST.get("from_position")) - 1
                 move_to = int(request.POST.get("to_position")) - 1
                 await ui_module.client_transmit(OP_DATA_ADDR, ("TP_MOVE_ACTION_TO_POS",
-                        "62f501fd498cc3cb66b88f89", move_from, move_to))
+                        tp_id, move_from, move_to))
                 msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                 response = msg[0]
                 if response == "TP_MOVE_ACTION_TO_POS":
@@ -311,7 +375,7 @@ async def create_toolpath(request):
         elif "delete" in request.POST:
             try:
                 wp_index = int(request.POST.get("wp_index"))
-                await ui_module.client_transmit(OP_DATA_ADDR, ("RM_FROM_TP", "62f501fd498cc3cb66b88f89", 
+                await ui_module.client_transmit(OP_DATA_ADDR, ("RM_FROM_TP", tp_id,
                                           wp_index))
                 msg = await ui_module.client_receive(OP_DATA_ADDR, timeout=100)
                 response = msg[0]
@@ -343,14 +407,20 @@ async def create_toolpath(request):
         move_element_choices = tuple((i, i) for i in range(1, len(tp_timeline)+1))
     move_element_from_from = MoveElementForm(choices=move_element_choices)
 
-    context = {"choose_waypoint_form": choose_waypoint_form, "timeline": displayed_timeline,
-               "move_element_from_form": move_element_from_from, "errors": errors}
+    if tp_name is not None:
+        name_form = ChangeNameForm({"new_name": tp_name})
+    elif name_form is None:
+        name_form = ChangeNameForm()
 
-    return render(request, "toolpath_manager/toolpath_editor.html", context=context)
+    context = {"tp_id": tp_id, "tp_name": tp_name, "errors": errors,
+               "choose_waypoint_form": choose_waypoint_form, "name_form": name_form,
+               "timeline": displayed_timeline, "move_element_from_form": move_element_from_from}
+
+    return render(request, "toolpath_manager/toolpath_detail.html", context=context)
 
 
 class ChangeNameForm(forms.Form):
-    new_name = forms.CharField(label="Name ändern: ", max_length=80)
+    new_name = forms.CharField(label="Change Name: ", max_length=80)
 
 
 class ChooseWaypointForm(forms.Form):

@@ -103,7 +103,11 @@ class OpData(BaseModule):
                         await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
 
                 case ["NEW_TP"]:
-                    pass
+                    post = {"tp_name": "New TP",
+                            "creation_time": time.time(),
+                            "timeline": []}
+                    tp_id = col_toolpaths.insert_one(post).inserted_id
+                    await self.server_transmit(sender, resp_id, ("NEW_TP", str(tp_id)))
 
                 case ["GET_TP", tp_id]:
                     tp_id = ObjectId(tp_id)
@@ -113,7 +117,34 @@ class OpData(BaseModule):
                         continue
 
                     timeline = tp_doc["timeline"]
-                    await self.server_transmit(sender, resp_id, ("GET_TP", str(tp_id), timeline))
+                    tp_name = tp_doc["tp_name"]
+                    await self.server_transmit(sender, resp_id, ("GET_TP", str(tp_id), tp_name,
+                                                                 timeline))
+
+                case ["DEL_TP", wp_id]:
+                    tp_id = ObjectId(tp_id)
+                    result = col_toolpaths.delete_one({"_id": tp_id})
+                    if result.acknowledged and result.deleted_count == 1:
+                        await self.server_transmit(sender, resp_id, ("DEL_TP",))
+                    else:
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
+
+                case ["GET_ALL_TP_IDS"]:
+                    all_tps_cursor = col_toolpaths.find({})
+                    tp_all_ids = [str(tp["_id"]) for tp in all_tps_cursor]
+                    all_tps_cursor = col_toolpaths.find({})
+                    tp_all_names = [tp["tp_name"] for tp in all_tps_cursor]
+                    await self.server_transmit(sender, resp_id,
+                                               ("GET_ALL_TP_IDS", tp_all_ids, tp_all_names))
+
+                case ["CHANGE_TP_NAME", tp_id, new_name]:
+                    tp_id = ObjectId(tp_id)
+                    new_value = {"$set": {"tp_name": new_name}}
+                    result = col_toolpaths.update_one({"_id": tp_id}, new_value)
+                    if result.acknowledged and result.modified_count == 1:
+                        await self.server_transmit(sender, resp_id, ("CHANGE_TP_NAME",))
+                    else:
+                        await self.server_transmit(sender, resp_id, ("UNEXPECTED_FAILURE",))
 
                 case ["ADD_WP_TO_TP", tp_id, wp_id]:
 
@@ -202,6 +233,7 @@ class OpData(BaseModule):
                                     
                 case _:
                     await self.server_transmit(sender, resp_id, ("UNKNOWN_REQUEST",))
+
 
 if __name__ == "__main__":
     opd = OpData()

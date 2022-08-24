@@ -10,7 +10,7 @@
             <li>ERROR --- {{ error }} </li>
         {% endfor %}
     {% else %}
-        <h1> DPT Eva Main Interface</h1>
+        <h1> DPT Main User Interface for the EVA Robot</h1>
         {% if messages %}
             <ul class="messages">
                 {% for message in messages %}
@@ -30,12 +30,8 @@
                 Backdriving mode
             </button>
         </form>
-        <form action="{% url 'create_toolpath' %}" method="get">
-            {% csrf_token %}
-            <button type="submit">
-                Toolpath Editor
-            </button>
-        </form>
+        <br>
+        <a href="{% url 'toolpath_index' %}">Toolpath Index</a>
     {% endif %}
   </body>
 </html>
