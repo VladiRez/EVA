@@ -1,6 +1,0 @@
-evasdk
-pyzmq
-pymongo
-Django
-
--e ./DPT/Control/dpt_module
