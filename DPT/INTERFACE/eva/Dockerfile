@@ -1,4 +1,6 @@
-FROM 192.168.56.104:5000/base_module
+ARG REGISTRY
+
+FROM $REGISTRY/base_module
 WORKDIR /app
 COPY requirements.txt requirements.txt
 RUN ["pip", "install", "-r", "requirements.txt"]
