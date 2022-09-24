@@ -31,6 +31,8 @@ services:
       - ME_CONFIG_BASICAUTH_PASSWORD=desktop
     ports:
       - 8081:8081
+    depends_on:
+      - op-data-db
   
   op-data-interface:
     container_name: op-data-interface

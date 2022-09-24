@@ -112,7 +112,7 @@ class BaseModule():
     # CLIENT METHODS
     ##########################################################################
 
-    def register_connection(self, address: str, server_count: int):
+    def register_connection(self, address: str, server_count: int) -> None:
         """ Connects to a server (dpt module).
 
         Parameters:
@@ -124,12 +124,8 @@ class BaseModule():
         new_socket.setsockopt(zmq.LINGER, 0)
         new_socket.setsockopt_string(zmq.IDENTITY, self.name)
 
-        for _ in range(server_count*2):
-            new_socket.connect(f"tcp://{address}:{self.zmq_port}")
-        
         self.client_sockets[address] = new_socket 
                  
-        return
 
     async def client_transmit(self, address: str, message: tuple) -> bytes:
         """Transmits message to server. 
@@ -154,6 +150,13 @@ class BaseModule():
         except KeyError:
             raise BaseModuleException("Module with that address not registered.")
 
+        # Connect to module
+        try:
+            client_socket.disconnect(f"tcp://{address}:{self.zmq_port}")
+        except zmq.ZMQError:
+            pass
+        client_socket.connect(f"tcp://{address}:{self.zmq_port}")        
+        
         # Create unique request id
         req_id = (abs(hash(time.time()) + hash(msg_json))).to_bytes(8, byteorder='big')
         await client_socket.send_multipart([req_id, msg_bytes], flags=zmq.DONTWAIT)
